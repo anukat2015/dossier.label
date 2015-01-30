@@ -378,6 +378,8 @@ class LabelStore(object):
         if subtopic_id is not None:
             pair = (content_id, subtopic_id)
             results = ifilter(lambda lab: pair in lab, results)
+        else:
+            results = ifilter(lambda lab: content_id in lab, results)
         return results
 
     def connected_component(self, ident):

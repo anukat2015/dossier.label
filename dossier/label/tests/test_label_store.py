@@ -19,6 +19,28 @@ def label_store(kvl):
     lstore.delete_all()
 
 
+def test_no_prefix(label_store):
+    foo_bar = Label('Foo', 'Bar', '', 1)
+    foobaz_bar = Label('Foo Baz', 'Bar', '', 1)
+
+    label_store.put(foo_bar)
+    label_store.put(foobaz_bar)
+
+    direct = list(label_store.directly_connected('Foo'))
+    assert direct == [foo_bar]
+
+
+def test_no_prefix_subtopic(label_store):
+    foo_bar = Label('Foo', 'Bar', '', 1, 'Foo', 'Bar')
+    foobaz_bar = Label('Foo Baz', 'Bar', '', 1, 'Foo Baz', 'Bar')
+
+    label_store.put(foo_bar)
+    label_store.put(foobaz_bar)
+
+    direct = list(label_store.directly_connected(('Foo', 'Foo')))
+    assert direct == [foo_bar]
+
+
 def test_put_get(label_store):
     @qc
     def _(cid1=id_, cid2=id_, ann=id_, v=coref_value):
