@@ -372,14 +372,12 @@ class LabelStore(object):
         '''
         content_id, subtopic_id = normalize_ident(ident)
         s = (content_id,)
-        e = (content_id + '\xff',)
+        e = (content_id,)
         results = imap(Label._from_kvlayer, self.kvl.scan(self.TABLE, (s, e)))
         results = latest_labels(results)
         if subtopic_id is not None:
             pair = (content_id, subtopic_id)
             results = ifilter(lambda lab: pair in lab, results)
-        else:
-            results = ifilter(lambda lab: content_id in lab, results)
         return results
 
     def connected_component(self, ident):
