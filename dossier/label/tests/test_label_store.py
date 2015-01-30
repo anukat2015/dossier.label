@@ -1,7 +1,7 @@
 '''dossier.label.tests
 
 .. This software is released under an MIT/X11 open source license.
-   Copyright 2012-2014 Diffeo, Inc.
+   Copyright 2012-2015 Diffeo, Inc.
 '''
 from __future__ import absolute_import, division, print_function
 
@@ -9,10 +9,10 @@ from pyquchk import qc
 import pytest
 
 from dossier.label import Label, LabelStore
-from dossier.label.tests import kvl, coref_value, id_
+from dossier.label.tests import kvl, coref_value, time_value, id_  # noqa
 
 
-@pytest.yield_fixture
+@pytest.yield_fixture  # noqa
 def label_store(kvl):
     lstore = LabelStore(kvl)
     yield lstore
@@ -75,7 +75,9 @@ def test_put_get_recent(label_store):
         label_store.put(lab1)
         label_store.put(lab2)
         got = label_store.get(cid1, cid2, ann)
-        assert lab1 == got and lab2 == got and lab2.value == got.value
+        assert got == lab2
+        assert got != lab1
+        assert got.value == lab2.value
     _()
 
 
@@ -89,7 +91,100 @@ def test_put_get_recent_unordered(label_store):
         label_store.put(lab1)
         label_store.put(lab2)
         got = label_store.get(cid1, cid2, ann)
-        assert lab1 == got and lab2 == got and lab2.value == got.value
+        assert got == lab2
+        assert got != lab1
+        assert got.value == lab2.value
+    _()
+
+
+def test_everything_simple(label_store):
+    @qc
+    def _(cid1=id_, cid2=id_, ann=id_, v=coref_value):
+        label_store.delete_all()
+        l = Label(cid1, cid2, ann, v)
+        label_store.put(l)
+        assert list(label_store.everything()) == [l]
+    _()
+
+
+def test_everything_two(label_store):
+    @qc
+    def _(cid1a=id_, cid1b=id_, ann1=id_, v1=coref_value, t1=time_value,
+          cid2a=id_, cid2b=id_, ann2=id_, v2=coref_value, t2=time_value):
+        label_store.delete_all()
+        l1 = Label(cid1a, cid1b, ann1, v1, epoch_ticks=t1)
+        l2 = Label(cid2a, cid2b, ann2, v2, epoch_ticks=t2)
+        label_store.put(l1)
+        label_store.put(l2)
+        if l1.same_subject_as(l2) and l1.epoch_ticks == l2.epoch_ticks:
+            expected = [l2]
+        else:
+            expected = list(sorted([l1, l2]))
+        assert (list(label_store.everything(include_deleted=True)) ==
+                expected)
+    _()
+
+
+def test_everything_overwrite(label_store):
+    @qc
+    def _(cid1=id_, cid2=id_, ann=id_, v=coref_value, t=time_value):
+        label_store.delete_all()
+        l1 = Label(cid1, cid2, ann, v, epoch_ticks=t)
+        l2 = Label(cid1, cid2, ann, v, epoch_ticks=t+1)
+        label_store.put(l1)
+        label_store.put(l2)
+        assert list(label_store.everything()) == [l2]
+        assert list(label_store.everything(include_deleted=True)) == [l2, l1]
+    _()
+
+
+def test_everything_content_id(label_store):
+    @qc
+    def _(cid1a=id_, cid1b=id_, ann1=id_, v1=coref_value, t1=time_value,
+          cid2a=id_, cid2b=id_, ann2=id_, v2=coref_value, t2=time_value):
+        label_store.delete_all()
+        l1 = Label(cid1a, cid1b, ann1, v1, epoch_ticks=t1)
+        l2 = Label(cid2a, cid2b, ann2, v2, epoch_ticks=t2)
+        label_store.put(l1)
+        label_store.put(l2)
+        if l1.same_subject_as(l2):
+            if l1.epoch_ticks == l2.epoch_ticks:
+                expected = [l2]
+            else:
+                expected = list(sorted([l1, l2]))[0:1]
+        elif cid1a == cid2a or cid1a == cid2b:
+            expected = list(sorted([l1, l2]))
+        else:
+            expected = [l1]
+        assert (list(label_store.everything(content_id=cid1a)) == expected)
+    _()
+
+
+def test_everything_subtopic_id(label_store):
+    @qc
+    def _(cid1a=id_, cid1b=id_, sid1a=id_, sid1b=id_, ann1=id_,
+          v1=coref_value, t1=time_value,
+          cid2a=id_, cid2b=id_, sid2a=id_, sid2b=id_, ann2=id_,
+          v2=coref_value, t2=time_value):
+        label_store.delete_all()
+        l1 = Label(cid1a, cid1b, ann1, v1, epoch_ticks=t1,
+                   subtopic_id1=sid1a, subtopic_id2=sid1b)
+        l2 = Label(cid2a, cid2b, ann2, v2, epoch_ticks=t2,
+                   subtopic_id1=sid2a, subtopic_id2=sid2b)
+        label_store.put(l1)
+        label_store.put(l2)
+        if l1.same_subject_as(l2):
+            if l1.epoch_ticks == l2.epoch_ticks:
+                expected = [l2]
+            else:
+                expected = list(sorted([l1, l2]))[0:1]
+        elif ((cid1a == cid2a and sid1a == sid2a) or
+              (cid1a == cid2b and sid1a == sid2b)):
+            expected = list(sorted([l1, l2]))
+        else:
+            expected = [l1]
+        assert (list(label_store.everything(content_id=cid1a,
+                                            subtopic_id=sid1a)) == expected)
     _()
 
 
@@ -103,13 +198,8 @@ def test_direct_connect_recent(label_store):
         label_store.put(lab1)
         label_store.put(lab2)
 
-        direct = list(label_store.directly_connected(cid1))
-        assert direct == [lab2] and direct == [lab1]
-        assert direct[0].value == lab2.value
-
-        direct = list(label_store.directly_connected(cid2))
-        assert direct == [lab2] and direct == [lab1]
-        assert direct[0].value == lab2.value
+        assert list(label_store.directly_connected(cid1)) == [lab2]
+        assert list(label_store.directly_connected(cid2)) == [lab2]
     _()
 
 
@@ -123,13 +213,8 @@ def test_direct_connect_recent_unordered(label_store):
         label_store.put(lab1)
         label_store.put(lab2)
 
-        direct = list(label_store.directly_connected(cid1))
-        assert direct == [lab2] and direct == [lab1]
-        assert direct[0].value == lab2.value
-
-        direct = list(label_store.directly_connected(cid2))
-        assert direct == [lab2] and direct == [lab1]
-        assert direct[0].value == lab2.value
+        assert list(label_store.directly_connected(cid1)) == [lab2]
+        assert list(label_store.directly_connected(cid2)) == [lab2]
     _()
 
 
@@ -302,11 +387,12 @@ def test_negative_label_inference(label_store):
     def get_pair(label):
         return (label.content_id1, label.content_id2)
 
-    correct_pairs = [('c', 'e'),
-                     ('c', 'f'),
-                     ('d', 'a'),
-                     ('d', 'b'),
-                     ('c', 'd')]
+    correct_pairs = [('a', 'd'),
+                     ('b', 'd'),
+                     ('c', 'd'),
+                     ('c', 'e'),
+                     ('c', 'f')]
+    # [but not (a,b) <-/-> (e,f)]
 
     inference = label_store.negative_label_inference(cd)
 
@@ -337,14 +423,14 @@ def test_negative_inference(label_store):
     def get_pair(label):
         return (label.content_id1, label.content_id2)
 
-    correct_pairs = [('g', 'a'),
-                     ('g', 'b'),
+    correct_pairs = [('a', 'g'),
+                     ('b', 'g'),
+                     ('c', 'g'),
                      ('c', 'h'),
-                     ('g', 'e'),
-                     ('g', 'f'),
+                     ('d', 'g'),
                      ('d', 'h'),
-                     ('g', 'c'),
-                     ('g', 'd')]
+                     ('e', 'g'),
+                     ('f', 'g')]
 
     inference = label_store.negative_inference('g')
 

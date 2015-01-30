@@ -59,9 +59,9 @@ class App(yakonfig.cmd.ArgParseCmd):
         labels = self.label_store.everything(
             include_deleted=args.include_deleted)
         for k, group in groupby(sorted(labels)):
-            print(k)
+            self.stdout.write('%s\n' % (k,))
             for lab in islice(group, 1, None):
-                print('    %s' % repr(lab))
+                self.stdout.write('    %s\n' % repr(lab))
 
     def args_dump_all(self, p):
         p.add_argument('--exclude-deleted', action='store_true',

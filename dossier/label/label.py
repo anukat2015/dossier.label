@@ -1,17 +1,16 @@
 '''dossier.label.label
 
 .. This software is released under an MIT/X11 open source license.
-   Copyright 2012-2014 Diffeo, Inc.
+   Copyright 2012-2015 Diffeo, Inc.
 '''
 from __future__ import absolute_import, division, print_function
 
-from collections import namedtuple
+from collections import Container, Hashable
 from datetime import datetime
 import functools
-from itertools import groupby, imap, combinations, ifilter
+from itertools import imap, combinations, ifilter
 import logging
 import struct
-import sys
 import time
 
 import enum
@@ -37,46 +36,89 @@ date in the future (UNIX epoch + 100 years).
 
 
 def time_complement(t):
-    return MAX_SECOND_TICKS - t
-
+    return long(MAX_SECOND_TICKS - t)
 
 
 class CorefValue(enum.Enum):
-    '''
-    An enumeration that describes the value of a coreference judgment by a
-    human. The judgment is always made with respect to a pair of content
+    '''A human-assigned value for a coreference judgement.
+
+    The judgment is always made with respect to a pair of content
     items.
 
     :cvar Negative: The two items are not coreferent.
     :cvar Unknown: It is unknown whether the two items are coreferent.
     :cvar Positive: The two items are coreferent.
+
     '''
     Negative = -1
     Unknown = 0
     Positive = 1
 
+    def __lt__(self, other):
+        if self.__class__ is other.__class__:
+            return self.value < other.value
+        return NotImplemented
+
+    def __le__(self, other):
+        if self.__class__ is other.__class__:
+            return self.value <= other.value
+        return NotImplemented
+
+    def __gt__(self, other):
+        if self.__class__ is other.__class__:
+            return self.value > other.value
+        return NotImplemented
+
+    def __ge__(self, other):
+        if self.__class__ is other.__class__:
+            return self.value >= other.value
+        return NotImplemented
+
 
 @functools.total_ordering
-class Label(namedtuple('_Label', 'content_id1 content_id2 subtopic_id1 ' +
-                                 'subtopic_id2 annotator_id epoch_ticks '+
-                                 'value rating')):
-    '''A label is an immutable unit of ground truth data.
+class Label(Container, Hashable):
+    '''An immutable unit of ground truth data.
 
-    .. automethod:: __new__
-    .. automethod:: reversed
-    .. automethod:: other
-    .. automethod:: __lt__
-    .. automethod:: __eq__
-    .. automethod:: __hash__
+    This is a statement that the item at :attr:`content_id1`,
+    :attr:`subtopic_id1` refers to (or doesn't) the same thing as the
+    item at :attr:`content_id2`, :attr:`subtopic_id2`.  This assertion
+    was recorded by :attr:`annotator_id`, a string identifying a user,
+    at :attr:`epoch_ticks`, with :class:`CorefValue` :attr:`value`.
+
+    On creation, the tuple is normalized such that the pair of
+    `content_id1` and `subtopic_id1` are less than the pair of
+    `content_id2` and `subtopic_id2`.
+
+    Labels are comparable, sortable, and hashable.  The sort order
+    compares the two content IDs, the two subtopic IDs,
+    :attr:`annotator_id`, :attr:`epoch_ticks` (most recent is
+    smallest), and then other fields.
+
+    .. automethod:: __init__
     .. automethod:: __contains__
+    .. automethod:: other
+    .. automethod:: subtopic_for
+    .. automethod:: same_subject_as
+    .. automethod:: most_recent
+
     '''
 
-    def __new__(cls, content_id1, content_id2, annotator_id, value,
-                subtopic_id1=None, subtopic_id2=None, epoch_ticks=None,
-                rating=None):
-        # `__new__` is overridden instead of `__init__` because `namedtuple`
-        # defines a `__new__` method. We modify construction by making
-        # several values optional.
+    def __init__(self, content_id1, content_id2, annotator_id, value,
+                 subtopic_id1=None, subtopic_id2=None, epoch_ticks=None,
+                 rating=None):
+        '''Create a new label.
+
+        Parameters are assigned to their corresponding fields, with
+        some normalization.  If `value` is an :class:`int`, the
+        corresponding :class:`CorefValue` is used instead.  If
+        `epoch_ticks` is :const:`None` then the current time is
+        used.  If `rating` is :const:`None` then it will be 1 if
+        `value` is :attr:`CorefValue.Positive` and 0 otherwise.
+
+        '''
+        super(Label, self).__init__()
+
+        # Fix up and provide defaults for various parameters
         if isinstance(value, int):
             value = CorefValue(value)
         if epoch_ticks is None:
@@ -92,32 +134,52 @@ class Label(namedtuple('_Label', 'content_id1 content_id2 subtopic_id1 ' +
         else:
             rating = 0
 
-        return super(Label, cls).__new__(
-            cls, content_id1=content_id1, content_id2=content_id2,
-            subtopic_id1=subtopic_id1, subtopic_id2=subtopic_id2,
-            annotator_id=annotator_id, epoch_ticks=epoch_ticks, value=value,
-            rating=rating)
+        # Fix ordering of content, subtopic pairs
+        if ((content_id2 < content_id1 or
+             (content_id2 == content_id1 and subtopic_id2 < subtopic_id1))):
+            self.content_id1 = content_id2
+            self.subtopic_id1 = subtopic_id2
+            self.content_id2 = content_id1
+            self.subtopic_id2 = subtopic_id1
+        else:
+            self.content_id1 = content_id1
+            self.subtopic_id1 = subtopic_id1
+            self.content_id2 = content_id2
+            self.subtopic_id2 = subtopic_id2
 
-    def reversed(self):
-        '''Returns a new label with ids swapped.
-
-        This method satisfies the following law: for every label
-        ``lab``, ``lab == lab.reversed()``.
-        '''
-        return self._replace(
-            content_id1=self.content_id2, content_id2=self.content_id1,
-            subtopic_id1=self.subtopic_id2, subtopic_id2=self.subtopic_id1)
+        self.annotator_id = annotator_id
+        self.value = value
+        self.epoch_ticks = epoch_ticks
+        self.rating = rating
 
     def __contains__(self, v):
         '''Tests membership of identifiers.
 
         If `v` is a tuple of ``(content_id, subtopic_id)``, then the
-        pair is checked for membership. Otherwise, `v` must be a `str`
-        and is checked for equality to one of the content ids in this
-        label.
+        pair is checked for membership. Otherwise, `v` must be a
+        :class:`str` and is checked for equality to one of the content
+        ids in this label.
 
-        As a special case, if ``v`` is ``(content_id, None)``, then
-        ``v`` is treated as if it were ``content_id``.
+        As a special case, if `v` is ``(content_id, None)``, then
+        `v` is treated as if it were ``content_id``.
+
+        >>> l = Label('c1', 'c2', 'a', 1)
+        >>> 'c1' in l
+        True
+        >>> 'a' in l
+        False
+        >>> ('c1', None) in l
+        True
+        >>> ('c1', 's1') in l
+        False
+        >>> ll = Label('c1', 'c2', 'a', 1, 's1', 's2')
+        >>> 'c1' in l
+        True
+        >>> ('c1', None) in l
+        True
+        >>> ('c1', 's1') in l
+        True
+
         '''
         if isinstance(v, tuple) and len(v) == 2 and v[1] is None:
             v = v[0]
@@ -135,150 +197,182 @@ class Label(namedtuple('_Label', 'content_id1 content_id2 subtopic_id1 ' +
         '''Returns the other content id.
 
         If ``content_id == self.content_id1``, then return
-        ``self.content_id2`` (and vice versa).
+        ``self.content_id2`` (and vice versa).  Raises
+        :exc:`exceptions.KeyError` if `content_id` is neither one.
+
+        >>> l = Label('c1, 'c2', 'a', 1)
+        >>> l.other('c1')
+        'c2'
+        >>> l.other('c2')
+        'c1'
+        >>> l.other('a')
+        Traceback (most recent call last):
+            ...
+        KeyError: 'a'
+
         '''
         if content_id == self.content_id1:
             return self.content_id2
-        else:
+        elif content_id == self.content_id2:
             return self.content_id1
+        else:
+            raise KeyError(content_id)
 
     def subtopic_for(self, content_id):
         '''Get the subtopic id that corresponds with a content id.
 
-        Beware ``content_id`` must be one of either ``self.content_id1``
-        or ``self.content_id2``.
-        '''
+        >>> l = Label('c1', 'c2', 'a', 1, 's1', 's2')
+        >>> l.subtopic_for('c1')
+        's1'
+        >>> l.subtopic_for('c2')
+        's2'
+        >>> l.subtopic_for('a')
+        Traceback (most recent call last):
+            ...
+        KeyError: 'a'
 
-        assert content_id == self.content_id1 or \
-            content_id == self.content_id2
+        :param str content_id: content ID to look up
+        :return: subtopic ID for `content_id`
+        :raise exceptions.KeyError: if `content_id` is neither
+          content ID in this label
+
+        '''
 
         if content_id == self.content_id1:
             return self.subtopic_id1
-        else:
+        elif content_id == self.content_id2:
             return self.subtopic_id2
+        else:
+            raise KeyError(content_id)
 
-    def _to_kvlayer(self):
-        '''Converts this label to a kvlayer tuple.
+    def __lt__(self, other):
+        if self.content_id1 != other.content_id1:
+            return self.content_id1 < other.content_id1
+        if self.content_id2 != other.content_id2:
+            return self.content_id2 < other.content_id2
+        if self.subtopic_id1 != other.subtopic_id1:
+            return self.subtopic_id1 < other.subtopic_id1
+        if self.subtopic_id2 != other.subtopic_id2:
+            return self.subtopic_id2 < other.subtopic_id2
+        if self.annotator_id != other.annotator_id:
+            return self.annotator_id < other.annotator_id
+        if self.epoch_ticks != other.epoch_ticks:
+            # opposite ordering here (consciously -- newer is smaller)
+            return self.epoch_ticks > other.epoch_ticks
+        if self.value is not other.value:
+            return self.value < other.value
+        if self.rating != other.rating:
+            return self.rating < other.rating
+        return False  # self == other
 
-        The tuple returned can be used directly in a :mod:`kvlayer`
-        ``put`` call.
+    def __eq__(self, other):
+        if self.content_id1 != other.content_id1:
+            return False
+        if self.content_id2 != other.content_id2:
+            return False
+        if self.subtopic_id1 != other.subtopic_id1:
+            return False
+        if self.subtopic_id2 != other.subtopic_id2:
+            return False
+        if self.annotator_id != other.annotator_id:
+            return False
+        if self.epoch_ticks != other.epoch_ticks:
+            return False
+        if self.value is not other.value:
+            return False
+        if self.rating != other.rating:
+            return False
+        return True
 
-        :rtype: ``(key, value)``
+    def same_subject_as(self, other):
+        '''Determine if two labels are about the same thing.
+
+        This predicate returns :const:`True` if `self` and `other`
+        have the same content IDs, subtopic IDs, and annotator ID.
+        The other fields may have any value.
+
+        >>> t = time.time()
+        >>> l1 = Label('c1', 'c2', 'a', CorefValue.Positive,
+        ...            epoch_ticks=t)
+        >>> l2 = Label('c1', 'c2', 'a', CorefValue.Negative,
+        ...            epoch_ticks=t)
+        >>> l1.same_subject_as(l2)
+        True
+        >>> l1 == l2
+        False
+
         '''
-        epoch_ticks_rev = long(time_complement(self.epoch_ticks))
-        negated = self._replace(epoch_ticks=epoch_ticks_rev)[0:len(self)-2]
-        packed_val = self._pack_value()
-        return (negated, packed_val)
+        if self.content_id1 != other.content_id1:
+            return False
+        if self.content_id2 != other.content_id2:
+            return False
+        if self.subtopic_id1 != other.subtopic_id1:
+            return False
+        if self.subtopic_id2 != other.subtopic_id2:
+            return False
+        if self.annotator_id != other.annotator_id:
+            return False
+        return True
 
     @staticmethod
-    def _from_kvlayer(row):
-        '''Create a new :class:`Label` from a kvlayer result.
+    def most_recent(labels):
+        '''Filter an iterator to return the most recent for each subject.
 
-        The ``row`` should be a tuple of ``(key, value)``
-        where ``key`` corresponds to the namespace defined at
-        :attr:`LabelStore._kvlayer_namespace`.
+        `labels` is any iterator over :class:`Label` objects.  It
+        should be sorted with the most recent first, which is the
+        natural sort order that :func:`sorted` and the
+        :class:`LabelStore` adapter will return.  The result of this
+        is a generator of the same labels but with any that are not
+        the most recent for the same subject (according to
+        :meth:`same_subject_as`) filtered out.
 
-        :param row: kvlayer result
-        :type row: ``(key, value)``
-        :rtype: :class:`Label`
         '''
-        key, value = row
-        cid1, cid2, subid1, subid2, ann, ticks = key
-        coref_val, rating = Label._unpack_value(value)
-        return Label(content_id1=cid1, content_id2=cid2,
-                     subtopic_id1=subid1, subtopic_id2=subid2,
-                     annotator_id=ann,
-                     epoch_ticks=time_complement(int(ticks)),
-                     value=coref_val, rating=rating)
-
-    @staticmethod
-    def _unpack_value(val):
-        '''Unpack byte into CorefValue and rating score.
-
-        Subtracting 1 from the lower 4 bits gives us the coref score.
-        The upper 4 bits gives us the rating score.
-        '''
-        (unpacked,) = struct.unpack('B', val)
-        coref_val = (unpacked & 15) - 1
-        rating = (unpacked >> 4)
-        return coref_val, rating
-
-    def _pack_value(self):
-        '''Pack CorefValue and rating score into a byte.
-
-        We add one to the coref value to make it unsigned.
-        This unsiged value makes the lower 4 bits of the byte.
-        The rating score makes up the upper 4 bits.
-        '''
-        to_pack = (self.value.value+1) | (self.rating << 4)
-        packed = struct.pack('B', to_pack)
-        return packed
-
-    def __lt__(l1, l2):
-        '''Defines a total ordering for labels.
-
-        The ordering is meant to be the same as the ordering used
-        in the underlying database storage. Namely, the key used
-        to determine ordering is: ``(cid1, cid2, subid1, subid2,
-        annotator_id, MAX_TIME - epoch_ticks)`` where ``cid1 <= cid2``
-        and ``subid1 <= subid2``.
-
-        Notably, the ordering does not include the coreferent ``value``
-        and it complements ``epoch_ticks`` so that more recent
-        labels appear first in ascending order.
-        '''
-        return l1._cmp_value < l2._cmp_value
-
-    @property
-    def _cmp_value(self):
-        cid1, cid2 = normalize_pair(self.content_id1, self.content_id2)
-        subid1, subid2 = normalize_pair(self.subtopic_id1, self.subtopic_id2)
-        ticks = time_complement(self.epoch_ticks)
-        return (cid1, cid2, subid1, subid2, self.annotator_id, ticks)
-
-    def __eq__(l1, l2):
-        '''Tests equality between two labels.
-
-        Equality is keyed on ``annotator_id`` and the unordered
-        comparison between content ids and subtopic ids.
-
-        This definition of equality does not include the values for
-        ``epoch_ticks`` or ``value``.
-        '''
-        return (
-            l1.annotator_id == l2.annotator_id
-            and unordered_pair_eq((l1.content_id1, l1.content_id2),
-                                  (l2.content_id1, l2.content_id2))
-            and unordered_pair_eq((l1.subtopic_id1, l1.subtopic_id2),
-                                  (l2.subtopic_id1, l2.subtopic_id2))
-        )
+        prev_label = None
+        for label in labels:
+            if prev_label is None or not label.same_subject_as(prev_label):
+                yield label
+            prev_label = label
 
     def __hash__(self):
-        '''Returns a hash of this label.
+        return (hash(self.content_id1) ^
+                hash(self.content_id2) ^
+                hash(self.subtopic_id1) ^
+                hash(self.subtopic_id2) ^
+                hash(self.annotator_id) ^
+                hash(self.epoch_ticks) ^
+                hash(self.value) ^
+                hash(self.rating))
 
-        The hash is made up of the content ids, subtopic ids and the
-        annotator id. This hash function obeys the following law:
-        for all labels ``x`` and ``y``, ``x == y`` if and only if
-        ``hash(x) == hash(y)``.
-        '''
-        # This code is clearer if we use `frozenset`, but let's avoid
-        # creating intermediate objects.
-        cid1, cid2 = normalize_pair(self.content_id1, self.content_id2)
-        subid1, subid2 = normalize_pair(self.subtopic_id1, self.subtopic_id2)
-        return hash((self.annotator_id, cid1, cid2, subid1, subid2))
+    def __str__(self):
+        res = self.content_id1
+        if self.subtopic_id1:
+            res += '(' + self.subtopic_id1 + ')'
+        if self.value is CorefValue.Positive:
+            res += ' =='
+        elif self.value is CorefValue.Unknown:
+            res += ' ??'
+        elif self.value is CorefValue.Negative:
+            res += ' !='
+        else:
+            res += ' **'
+        res += '(' + str(self.rating) + ') '
+        res += self.content_id2
+        if self.subtopic_id2:
+            res += '(' + self.subtopic_id2 + ')'
+        res += ' by ' + self.annotator_id
+        res += ' at ' + str(datetime.utcfromtimestamp(self.epoch_ticks))
+        return res
 
     def __repr__(self):
-        tpl = 'Label({cid1}, {cid2}, ' + \
-                    '{subid1}{subid2}annotator={ann}, {tstr}, value={v})'
-        subid1, subid2 = '', ''
-        if self.subtopic_id1:
-            subid1 = 'subtopic1=%s, ' % self.subtopic_id1
-        if self.subtopic_id2:
-            subid2 = 'subtopic2=%s, ' % self.subtopic_id2
-        dt = datetime.utcfromtimestamp(self.epoch_ticks)
-        return tpl.format(cid1=self.content_id1, cid2=self.content_id2,
-                         subid1=subid1, subid2=subid2, tstr=str(dt),
-                         ann=self.annotator_id, v=self.value)
+        return ('Label('
+                'content_id1={0.content_id1}, '
+                'content_id2={0.content_id2}, '
+                'annotator_id={0.annotator_id}, '
+                'value={0.value}, '
+                'subtopic_id1={0.subtopic_id1}, '
+                'subtopic_id2={0.subtopic_id2}, '
+                'epoch_ticks={0.epoch_ticks}, '
+                'rating={0.rating})'.format(self))
 
 
 class LabelStore(object):
@@ -322,9 +416,22 @@ class LabelStore(object):
         :param label: label
         :type label: :class:`Label`
         '''
-        logger.info('adding label "%r"', label)
-        self.kvl.put(self.TABLE,
-                     label._to_kvlayer(), label.reversed()._to_kvlayer())
+
+        # Store `label` under both normal and swapped key tuples,
+        # so that we can efficiently find c2<->c1 labels
+        k1 = (label.content_id1, label.content_id2,
+              label.subtopic_id1, label.subtopic_id2,
+              label.annotator_id, time_complement(label.epoch_ticks))
+        k2 = (label.content_id2, label.content_id1,
+              label.subtopic_id2, label.subtopic_id1,
+              label.annotator_id, time_complement(label.epoch_ticks))
+
+        # Pack value and rating into a single byte, since both will likely
+        # be small integers
+        to_pack = (label.value.value+1) | (label.rating << 4)
+        v = struct.pack('B', to_pack)
+
+        self.kvl.put(self.TABLE, (k1, v), (k2, v))
 
     def get(self, cid1, cid2, annotator_id, subid1='', subid2=''):
         '''Retrieve a label from the store.
@@ -332,8 +439,10 @@ class LabelStore(object):
         When ``subid1`` and ``subid2`` are empty, then a label without
         subtopic identifiers will be returned.
 
-        Note that the combination of content ids, subtopic ids and
-        an annotator id *uniquely* identifies a label.
+        If there are multiple labels stored with the same parts,
+        the single most recent one will be returned.  If there are
+        no labels with these parts, :exc:`exceptions.KeyError` will
+        be raised.
 
         :param str cid1: content id
         :param str cid2: content id
@@ -342,17 +451,34 @@ class LabelStore(object):
         :param str subid2: subtopic id
         :rtype: :class:`Label`
         :raises: :exc:`KeyError` if no label could be found.
+
         '''
-        s = (cid1, cid2, subid1, subid2, annotator_id, long(-sys.maxint - 1))
-        e = (cid1, cid2, subid1, subid2, annotator_id, long(sys.maxint))
+        t = (cid1, cid2, subid1, subid2, annotator_id)
 
         # We return the first result because the `kvlayer` abstraction
         # guarantees that the first result will be the most recent entry
         # for this particular key (since the timestamp is inserted as a
         # complement value).
-        for row in self.kvl.scan(self.TABLE, (s, e)):
-            return Label._from_kvlayer(row)
-        raise KeyError((s, e))
+        for k, v in self.kvl.scan(self.TABLE, (t, t)):
+            return self._label_from_kvlayer(k, v)
+        raise KeyError(t)
+
+    def _label_from_kvlayer(self, k, v):
+        '''Make a label from a kvlayer row.'''
+        (content_id1, content_id2, subtopic_id1, subtopic_id2,
+         annotator_id, inverted_epoch_ticks) = k
+        epoch_ticks = time_complement(inverted_epoch_ticks)
+        (unpacked,) = struct.unpack('B', v)
+        value = (unpacked & 15) - 1
+        rating = (unpacked >> 4)
+        return Label(content_id1=content_id1,
+                     content_id2=content_id2,
+                     annotator_id=annotator_id,
+                     value=value,
+                     subtopic_id1=subtopic_id1,
+                     subtopic_id2=subtopic_id2,
+                     epoch_ticks=epoch_ticks,
+                     rating=rating)
 
     def directly_connected(self, ident):
         '''Return a generator of labels connected to ``ident``.
@@ -371,14 +497,9 @@ class LabelStore(object):
         :rtype: generator of :class:`Label`
         '''
         content_id, subtopic_id = normalize_ident(ident)
-        s = (content_id,)
-        e = (content_id,)
-        results = imap(Label._from_kvlayer, self.kvl.scan(self.TABLE, (s, e)))
-        results = latest_labels(results)
-        if subtopic_id is not None:
-            pair = (content_id, subtopic_id)
-            results = ifilter(lambda lab: pair in lab, results)
-        return results
+        return self.everything(include_deleted=False,
+                               content_id=content_id,
+                               subtopic_id=subtopic_id)
 
     def connected_component(self, ident):
         '''Return a connected component generator for ``ident``.
@@ -495,16 +616,71 @@ class LabelStore(object):
             cid = comp_label.other(label.content_id1)
             yield Label(label.content_id2, cid, 'auto', CorefValue.Negative)
 
-    def everything(self, include_deleted=False):
+    def _filter_keys(self, content_id=None, subtopic_id=None):
+        '''Filter out-of-order labels by key tuple.
+
+        :class:`Label` always sorts by `(cid1,cid2,sid1,sid2)`, but
+        for efficient lookups on `cid2` this class also stores in
+        order `(cid2,cid1,sid2,sid1)`.  Filter out things that are
+        in the wrong order.  But, if an original query specified
+        `content_id` or `subtopic_id`, account for the possibility
+        that something might be apparently out-of-order but its
+        dual will not be in the query at all.
+
+        '''
+        def accept(kvp):
+            (content_id1, content_id2, subtopic_id1, subtopic_id2,
+             annotator_id, inverted_epoch_ticks) = kvp[0]
+            if content_id is None:
+                # We're scanning everything, so accept the label if
+                # it's the natural order; l.content_id1 == cid1
+                return (content_id1 < content_id2 or
+                        (content_id1 == content_id2 and
+                         subtopic_id1 <= subtopic_id2))
+            assert content_id1 == content_id  # because that's the scan range
+            # If we're not looking for subtopic IDs, then accept records
+            # matching the content ID that are in natural order
+            if subtopic_id is None:
+                if content_id2 != content_id:
+                    return True  # will never see its dual
+                return subtopic_id1 <= subtopic_id2
+            # The scan range doesn't include subtopic IDs (the key schema
+            # is oriented towards querying content-to-content labels)
+            # so we need to accept records where either part matches
+            # (if both parts match then the record is its own dual)
+            if subtopic_id == subtopic_id1:
+                return True
+            if content_id == content_id2 and subtopic_id == subtopic_id2:
+                return True
+            return False
+        return accept
+
+    def everything(self, include_deleted=False, content_id=None,
+                   subtopic_id=None):
         '''Returns a generator of all labels in the store.
 
-        If ``include_deleted`` is ``True``, labels that have been
-        deleted are also included.
+        If `include_deleted` is :const:`True`, labels that have been
+        overwritten with more recent labels are also included.  If
+        `content_id` is not :const:`None`, only labels for that
+        content ID are retrieved; and then if `subtopic_id` is not
+        :const:`None`, only that subtopic is retrieved, else all
+        subtopics are retrieved.  The returned labels will always be
+        in sorted order, content IDs first, and with those with the
+        same content, subtopic, and annotator IDs sorted newest first.
 
         :rtype: generator of :class:`Label`
+
         '''
-        results = imap(Label._from_kvlayer, self.kvl.scan(self.TABLE))
-        return results if include_deleted else latest_labels(results)
+        if content_id is not None:
+            ranges = [((content_id,), (content_id,))]
+        else:
+            ranges = []
+        labels = self.kvl.scan(self.TABLE, *ranges)
+        labels = ifilter(self._filter_keys(content_id, subtopic_id), labels)
+        labels = imap(lambda p: self._label_from_kvlayer(*p), labels)
+        if not include_deleted:
+            labels = Label.most_recent(labels)
+        return labels
 
     def delete_all(self):
         '''Deletes all labels in the store.'''
@@ -531,14 +707,6 @@ def normalize_pair(x, y):
         return y, x
     else:
         return x, y
-
-
-def latest_labels(label_iterable):
-    '''Returns the most recent labels from a sorted iterable.'''
-    for _, group in groupby(label_iterable):
-        for lab in group:
-            yield lab
-            break
 
 
 def expand_labels(labels, subtopic=False):
