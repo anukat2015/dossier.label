@@ -342,6 +342,23 @@ def test_connected_component_many_most_recent_diff_value(label_store):
     assert frozenset(connected) == frozenset([ab])
 
 
+def test_connected_component_collision(label_store):
+    # You can't store the hashes of objects and expect there to never
+    # be collisions.  As a corollary, hash(str) isn't that great
+    # vs. small changes, and the recommended technique of xoring
+    # together field hashes can get collisions quickly.
+    # In particular, hash('test0') ^ hash('test1') is 1,
+    # as is hash('test2') ^ hash('test3').
+    ab = Label('test0', 'test1', '', 1)
+    bc = Label('test1', 'test2', '', 1)
+    cd = Label('test2', 'test3', '', 1)
+    label_store.put(ab)
+    label_store.put(bc)
+    label_store.put(cd)
+
+    assert list(label_store.connected_component('test0')) == [ab, bc, cd]
+
+
 def test_expand(label_store):
     ab = Label('a', 'b', '', 1)
     bc = Label('b', 'c', '', 1)

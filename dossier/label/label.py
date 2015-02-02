@@ -562,7 +562,7 @@ class LabelStore(object):
         ident = normalize_ident(ident)
         done = set()  # set of cids that we've queried with
         todo = set([ident])  # set of cids to do a query for
-        label_hashes = set()
+        labels = set()
         while todo:
             ident = todo.pop()
             done.add(ident)
@@ -576,9 +576,8 @@ class LabelStore(object):
                 if ident2 not in done:
                     todo.add(ident2)
 
-                h = hash(label)
-                if h not in label_hashes:
-                    label_hashes.add(h)
+                if label not in labels:
+                    labels.add(label)
                     yield label
 
     def expand(self, ident):
