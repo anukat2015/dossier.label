@@ -14,7 +14,6 @@ from __future__ import absolute_import, division, print_function
 import argparse
 from itertools import groupby, imap, islice
 import json
-import sys
 
 import kvlayer
 import yakonfig
@@ -23,21 +22,41 @@ from dossier.label import CorefValue, Label, LabelStore
 
 
 def label_to_dict(lab):
-    return {field: getattr(lab, field) for field in lab._fields}
+    return {
+        'content_id1': lab.content_id1,
+        'content_id2': lab.content_id2,
+        'annotator_id': lab.annotator_id,
+        'value': lab.value.value,
+        'subtopic_id1': lab.subtopic_id1,
+        'subtopic_id2': lab.subtopic_id2,
+        'epoch_ticks': lab.epoch_ticks,
+        'rating': lab.rating,
+    }
+
+
+def to_bytes(s):
+    '''Coerce a string to a byte string, UTF-8 encoding if needed.
+
+    :func:`json.loads` will always return Unicode strings, but
+    the various sorts of IDs are UTF-8-encoded byte strings.
+
+    '''
+    if isinstance(s, unicode):
+        return s.encode('utf-8')
+    return s
 
 
 def dict_to_label(d):
-    def to_bytes(v):
-        if isinstance(v, unicode):
-            return v.encode('utf-8')
-        return v
-
-    def to_long(v):
-        if isinstance(v, int):
-            return long(v)
-        return v
-
-    return Label(**{k: to_long(to_bytes(v)) for k, v in d.items()})
+    return Label(
+        content_id1=to_bytes(d['content_id1']),
+        content_id2=to_bytes(d['content_id2']),
+        annotator_id=to_bytes(d['annotator_id']),
+        value=CorefValue(d['value']),
+        subtopic_id1=to_bytes(d.get('subtopic_id1', None)),
+        subtopic_id2=to_bytes(d.get('subtopic_id2', None)),
+        epoch_ticks=d.get('epoch_ticks', None),  # will become time.time()
+        rating=d.get('rating', None),
+    )
 
 
 class App(yakonfig.cmd.ArgParseCmd):
@@ -71,7 +90,7 @@ class App(yakonfig.cmd.ArgParseCmd):
     def do_dump_all(self, args):
         labels = list(imap(label_to_dict, self.label_store.everything(
             include_deleted=not args.exclude_deleted)))
-        json.dump(labels, fp=sys.stdout)
+        json.dump(labels, fp=self.stdout)
 
     def args_load(self, p):
         p.add_argument('fpath', nargs='?', default=None,
@@ -79,33 +98,39 @@ class App(yakonfig.cmd.ArgParseCmd):
                             'stdin is used.')
 
     def do_load(self, args):
-        fout = sys.stdin if args.fpath is None else open(args.fpath, 'w+')
-        for lab in imap(dict_to_label, json.load(fp=fout)):
-            self.label_store.put(lab)
+        if args.fpath is None:
+            self._load(self.stdin)
+        else:
+            with open(args.fpath, 'r') as fp:
+                self._load(fp)
+
+    def _load(self, fp):
+        for record in json.load(fp):
+            label = dict_to_label(record)
+            self.label_store.put(label)
 
     def args_get(self, p):
         p.add_argument('content_id', type=str,
                        help='Show all labels directly ascribed to content_id')
-        p.add_argument('--value', type=CorefValue, choices=[-1, 0, 1],
+        p.add_argument('--value', type=int, choices=[-1, 0, 1],
                        default=None,
                        help='Only show labels with this coreferent value.')
 
     def do_get(self, args):
+        '''Get labels directly connected to a content item.'''
         for label in self.label_store.directly_connected(args.content_id):
-            if args.value is None or label.value == args.value:
-                print(label)
+            if args.value is None or label.value.value == args.value:
+                self.stdout.write('{}\n'.format(label))
 
     def args_connected(self, p):
         p.add_argument('content_id', type=str,
-                       help='Show all labels directly ascribed to content_id')
-        p.add_argument('value', type=int, choices=[-1, 0, 1],
-                       help='Only show labels with this coreferent value.')
+                       help='Show all labels connected to content_id')
 
     def do_connected(self, args):
-        connected = self.label_store.connected_component(
-            args.content_id, args.value)
+        '''Find a connected component from positive labels on an item.'''
+        connected = self.label_store.connected_component(args.content_id)
         for label in connected:
-            print(label)
+            self.stdout.write('{}\n'.format(label))
 
     def args_delete_all(self, p):
         pass

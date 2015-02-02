@@ -94,6 +94,43 @@ class Label(Container, Hashable):
     :attr:`annotator_id`, :attr:`epoch_ticks` (most recent is
     smallest), and then other fields.
 
+    .. attribute:: content_id1
+
+       The first content ID.
+
+    .. attribute:: content_id2
+
+       The second content ID.
+
+    .. attribute:: annotator_id
+
+       An identifier of the user making this assertion.
+
+    .. attribute:: value
+
+       A :class:`CorefValue` stating whether this is a positive or
+       negative coreference assertion.
+
+    .. attribute:: subtopic_id1
+
+       An identifier defining a section or region of
+       :attr:`content_id1`.
+
+    .. attribute:: subtopic_id2
+
+       An identifier defining a section or region of
+       :attr:`content_id2`.
+
+    .. attribute:: epoch_ticks
+
+       The time at which :attr:`annotator_id` made this assertion,
+       in seconds since the Unix epoch.
+
+    .. attribute:: rating
+
+       An additional score showing the relative importance of this
+       label, mirroring :class:`streamcorpus.Rating`.
+
     .. automethod:: __init__
     .. automethod:: __contains__
     .. automethod:: other
