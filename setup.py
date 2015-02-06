@@ -38,9 +38,10 @@ setup(
         'License :: OSI Approved :: MIT License',
     ],
     install_requires=[
+        'cbor',
         'enum34',
         'kvlayer',
-        'pyquchk', 
+        'pyquchk',
         'pytest',
         'yakonfig >= 0.7.2',
     ],

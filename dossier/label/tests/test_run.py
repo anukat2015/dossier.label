@@ -6,8 +6,8 @@
 '''
 from __future__ import absolute_import
 from cStringIO import StringIO
-import json
 
+import cbor
 import pytest
 
 from kvlayer._local_memory import LocalStorage
@@ -52,36 +52,36 @@ def four_labels(label_store):
 @pytest.fixture
 def four_item_dump():
     return [
-        {u'content_id1': u'c1',
-         u'content_id2': u'c2',
-         u'annotator_id': u'a1',
+        {u'content_id1': 'c1',
+         u'content_id2': 'c2',
+         u'annotator_id': 'a1',
          u'value': 1,
-         u'subtopic_id1': u'',
-         u'subtopic_id2': u'',
+         u'subtopic_id1': '',
+         u'subtopic_id2': '',
          u'epoch_ticks': 1234567892,
          u'rating': 1},
-        {u'content_id1': u'c1',
-         u'content_id2': u'c2',
-         u'annotator_id': u'a1',
+        {u'content_id1': 'c1',
+         u'content_id2': 'c2',
+         u'annotator_id': 'a1',
          u'value': 1,
-         u'subtopic_id1': u'',
-         u'subtopic_id2': u'',
+         u'subtopic_id1': '',
+         u'subtopic_id2': '',
          u'epoch_ticks': 1234567891,
          u'rating': 1},
-        {u'content_id1': u'c1',
-         u'content_id2': u'c2',
-         u'annotator_id': u'a1',
+        {u'content_id1': 'c1',
+         u'content_id2': 'c2',
+         u'annotator_id': 'a1',
          u'value': 1,
-         u'subtopic_id1': u'',
-         u'subtopic_id2': u'',
+         u'subtopic_id1': '',
+         u'subtopic_id2': '',
          u'epoch_ticks': 1234567890,
          u'rating': 1},
-        {u'content_id1': u'c1',
-         u'content_id2': u'c2',
-         u'annotator_id': u'a2',
+        {u'content_id1': 'c1',
+         u'content_id2': 'c2',
+         u'annotator_id': 'a2',
          u'value': -1,
-         u'subtopic_id1': u'',
-         u'subtopic_id2': u'',
+         u'subtopic_id1': '',
+         u'subtopic_id2': '',
          u'epoch_ticks': 1234567890,
          u'rating': 0},
     ]
@@ -144,19 +144,19 @@ def test_list_subtopics(app, label_store):
 
 def test_dump_all(app, four_labels, four_item_dump):
     app.runcmd('dump_all', [])
-    dump = json.loads(app.stdout.getvalue())
+    dump = cbor.loads(app.stdout.getvalue())
     assert dump == four_item_dump
 
 
 def test_dump_all_exclude_deleted(app, four_labels, two_item_dump):
     app.runcmd('dump_all', ['--exclude-deleted'])
-    dump = json.loads(app.stdout.getvalue())
+    dump = cbor.loads(app.stdout.getvalue())
     assert dump == two_item_dump
 
 
 def test_load_short(app, label_store, two_item_dump, tmpdir):
-    fn = tmpdir.join('dump.json')
-    fn.write(json.dumps(two_item_dump))
+    fn = tmpdir.join('dump.cbor')
+    fn.write(cbor.dumps(two_item_dump), mode='wb')
 
     app.runcmd('load', [str(fn)])
     assert (len(list(label_store.everything(include_deleted=True))) ==
@@ -165,12 +165,12 @@ def test_load_short(app, label_store, two_item_dump, tmpdir):
             len(two_item_dump))
     assert app.stdout.getvalue() == ''
     app.runcmd('dump_all', [])
-    assert json.loads(app.stdout.getvalue()) == two_item_dump
+    assert cbor.loads(app.stdout.getvalue()) == two_item_dump
 
 
 def test_load_full(app, label_store, four_item_dump, tmpdir):
-    fn = tmpdir.join('dump.json')
-    fn.write(json.dumps(four_item_dump))
+    fn = tmpdir.join('dump.cbor')
+    fn.write(cbor.dumps(four_item_dump), mode='wb')
 
     app.runcmd('load', [str(fn)])
     assert (len(list(label_store.everything(include_deleted=True))) ==
@@ -178,7 +178,7 @@ def test_load_full(app, label_store, four_item_dump, tmpdir):
     assert (len(list(label_store.everything(include_deleted=False))) == 2)
     assert app.stdout.getvalue() == ''
     app.runcmd('dump_all', [])
-    assert json.loads(app.stdout.getvalue()) == four_item_dump
+    assert cbor.loads(app.stdout.getvalue()) == four_item_dump
 
 
 def test_get(app, four_labels):

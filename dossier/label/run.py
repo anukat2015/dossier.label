@@ -21,14 +21,14 @@ from dossier.label import CorefValue, Label, LabelStore
 
 def label_to_dict(lab):
     return {
-        'content_id1': lab.content_id1,
-        'content_id2': lab.content_id2,
-        'annotator_id': lab.annotator_id,
-        'value': lab.value.value,
-        'subtopic_id1': lab.subtopic_id1,
-        'subtopic_id2': lab.subtopic_id2,
-        'epoch_ticks': lab.epoch_ticks,
-        'rating': lab.rating,
+        u'content_id1': lab.content_id1,
+        u'content_id2': lab.content_id2,
+        u'annotator_id': lab.annotator_id,
+        u'value': lab.value.value,
+        u'subtopic_id1': lab.subtopic_id1,
+        u'subtopic_id2': lab.subtopic_id2,
+        u'epoch_ticks': lab.epoch_ticks,
+        u'rating': lab.rating,
     }
 
 
@@ -76,7 +76,7 @@ class App(yakonfig.cmd.ArgParseCmd):
     def do_dump_all(self, args):
         labels = list(imap(label_to_dict, self.label_store.everything(
             include_deleted=not args.exclude_deleted)))
-        cbor.dump(labels, fp=self.stdout)
+        print(cbor.dumps(labels), file=self.stdout)
 
     def args_show_all(self, p):
         p.add_argument('--exclude-deleted', action='store_true',
@@ -102,7 +102,7 @@ class App(yakonfig.cmd.ArgParseCmd):
                 self._load(fp)
 
     def _load(self, fp):
-        for record in cbor.load(fp):
+        for record in cbor.loads(fp.read()):
             label = dict_to_label(record)
             self.label_store.put(label)
 
