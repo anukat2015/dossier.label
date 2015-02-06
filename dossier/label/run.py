@@ -13,8 +13,8 @@ Run ``dossier.label --help`` for the available commands.
 from __future__ import absolute_import, division, print_function
 import argparse
 from itertools import groupby, imap, islice
-import json
 
+import cbor
 import kvlayer
 import yakonfig
 
@@ -34,26 +34,14 @@ def label_to_dict(lab):
     }
 
 
-def to_bytes(s):
-    '''Coerce a string to a byte string, UTF-8 encoding if needed.
-
-    :func:`json.loads` will always return Unicode strings, but
-    the various sorts of IDs are UTF-8-encoded byte strings.
-
-    '''
-    if isinstance(s, unicode):
-        return s.encode('utf-8')
-    return s
-
-
 def dict_to_label(d):
     return Label(
-        content_id1=to_bytes(d['content_id1']),
-        content_id2=to_bytes(d['content_id2']),
-        annotator_id=to_bytes(d['annotator_id']),
+        content_id1=d['content_id1'],
+        content_id2=d['content_id2'],
+        annotator_id=d['annotator_id'],
         value=CorefValue(d['value']),
-        subtopic_id1=to_bytes(d.get('subtopic_id1', None)),
-        subtopic_id2=to_bytes(d.get('subtopic_id2', None)),
+        subtopic_id1=d.get('subtopic_id1', None),
+        subtopic_id2=d.get('subtopic_id2', None),
         epoch_ticks=d.get('epoch_ticks', None),  # will become time.time()
         rating=d.get('rating', None),
     )
@@ -90,7 +78,18 @@ class App(yakonfig.cmd.ArgParseCmd):
     def do_dump_all(self, args):
         labels = list(imap(label_to_dict, self.label_store.everything(
             include_deleted=not args.exclude_deleted)))
-        json.dump(labels, fp=self.stdout)
+        cbor.dump(labels, fp=self.stdout)
+
+    def args_show_all(self, p):
+        p.add_argument('--exclude-deleted', action='store_true',
+                       help='When set, only the most recent labels are '
+                            'dumped.')
+
+    def do_show_all(self, args):
+        labels = list(imap(label_to_dict, self.label_store.everything(
+            include_deleted=not args.exclude_deleted)))
+        for label in labels:
+            print('%r' % label)
 
     def args_load(self, p):
         p.add_argument('fpath', nargs='?', default=None,
@@ -105,7 +104,7 @@ class App(yakonfig.cmd.ArgParseCmd):
                 self._load(fp)
 
     def _load(self, fp):
-        for record in json.load(fp):
+        for record in cbor.load(fp):
             label = dict_to_label(record)
             self.label_store.put(label)
 
