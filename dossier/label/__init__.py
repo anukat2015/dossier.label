@@ -58,6 +58,9 @@ configuration setup.
 .. autoclass:: Label
 .. autoclass:: CorefValue
 
+:command:`dossier.label` command-line tool
+==========================================
+
 .. automodule:: dossier.label.run
 '''
 from __future__ import absolute_import, division, print_function

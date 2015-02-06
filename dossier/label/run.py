@@ -1,9 +1,7 @@
-'''
-.. This software is released under an MIT/X11 open source license.
-   Copyright 2012-2014 Diffeo, Inc.
+''':command:`dossier.label` command-line tool.
 
-``dossier.label`` command line tool
-===================================
+.. This software is released under an MIT/X11 open source license.
+   Copyright 2012-2015 Diffeo, Inc.
 
 ``dossier.label`` is a command line application for viewing the raw label
 data inside the database. Generally, this is a debugging tool for developers.
