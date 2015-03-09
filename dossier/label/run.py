@@ -45,6 +45,17 @@ def dict_to_label(d):
     )
 
 
+def batch(it, size):
+    b = []
+    for i, v in enumerate(it, 1):
+        if i % size == 0:
+            yield b
+            b = []
+        b.append(v)
+    if len(b) > 0:
+        yield b
+
+
 class App(yakonfig.cmd.ArgParseCmd):
     def __init__(self, *args, **kwargs):
         yakonfig.cmd.ArgParseCmd.__init__(self, *args, **kwargs)
@@ -102,9 +113,9 @@ class App(yakonfig.cmd.ArgParseCmd):
                 self._load(fp)
 
     def _load(self, fp):
-        for record in cbor.loads(fp.read()):
-            label = dict_to_label(record)
-            self.label_store.put(label)
+        for batch_records in batch(cbor.loads(fp.read()), 500):
+            labels = map(dict_to_label, batch_records)
+            self.label_store.put(*labels)
 
     def args_get(self, p):
         p.add_argument('content_id', type=str,

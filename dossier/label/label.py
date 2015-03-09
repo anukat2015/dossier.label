@@ -447,28 +447,30 @@ class LabelStore(object):
         self.kvl = kvlclient
         self.kvl.setup_namespace(self._kvlayer_namespace)
 
-    def put(self, label):
+    def put(self, *labels):
         '''Add a new label to the store.
 
         :param label: label
         :type label: :class:`Label`
         '''
+        puts = []
+        for label in labels:
+            # Store `label` under both normal and swapped key tuples,
+            # so that we can efficiently find c2<->c1 labels
+            k1 = (label.content_id1, label.content_id2,
+                  label.subtopic_id1, label.subtopic_id2,
+                  label.annotator_id, time_complement(label.epoch_ticks))
+            k2 = (label.content_id2, label.content_id1,
+                  label.subtopic_id2, label.subtopic_id1,
+                  label.annotator_id, time_complement(label.epoch_ticks))
 
-        # Store `label` under both normal and swapped key tuples,
-        # so that we can efficiently find c2<->c1 labels
-        k1 = (label.content_id1, label.content_id2,
-              label.subtopic_id1, label.subtopic_id2,
-              label.annotator_id, time_complement(label.epoch_ticks))
-        k2 = (label.content_id2, label.content_id1,
-              label.subtopic_id2, label.subtopic_id1,
-              label.annotator_id, time_complement(label.epoch_ticks))
-
-        # Pack value and rating into a single byte, since both will likely
-        # be small integers
-        to_pack = (label.value.value+1) | (label.rating << 4)
-        v = struct.pack('B', to_pack)
-
-        self.kvl.put(self.TABLE, (k1, v), (k2, v))
+            # Pack value and rating into a single byte, since both will likely
+            # be small integers
+            to_pack = (label.value.value+1) | (label.rating << 4)
+            v = struct.pack('B', to_pack)
+            puts.append((k1, v))
+            puts.append((k2, v))
+        self.kvl.put(self.TABLE, *puts)
 
     def get(self, cid1, cid2, annotator_id, subid1='', subid2=''):
         '''Retrieve a label from the store.
