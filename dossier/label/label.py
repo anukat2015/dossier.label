@@ -646,13 +646,21 @@ class LabelStore(object):
 
         cid2_comp = self.connected_component(label.content_id2)
         for comp_label in cid2_comp:
-            cid = comp_label.other(label.content_id2)
-            yield Label(label.content_id1, cid, 'auto', CorefValue.Negative)
+            comp_cids = (comp_label.content_id1,
+                         comp_label.content_id2)
+            for comp_cid in comp_cids:
+                if not comp_cid == label.content_id2:
+                    yield Label(label.content_id1, comp_cid,
+                                'auto', CorefValue.Negative)
 
         cid1_comp = self.connected_component(label.content_id1)
         for comp_label in cid1_comp:
-            cid = comp_label.other(label.content_id1)
-            yield Label(label.content_id2, cid, 'auto', CorefValue.Negative)
+            comp_cids = (comp_label.content_id1,
+                         comp_label.content_id2)
+            for comp_cid in comp_cids:
+                if not comp_cid == label.content_id1:
+                    yield Label(label.content_id2, comp_cid,
+                                'auto', CorefValue.Negative)
 
     def _filter_keys(self, content_id=None, subtopic_id=None):
         '''Filter out-of-order labels by key tuple.

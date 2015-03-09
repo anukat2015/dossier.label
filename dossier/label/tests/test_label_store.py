@@ -393,6 +393,7 @@ def test_negative_label_inference(label_store):
     dg = Label('d', 'g', '', -1)
 
     cd = Label('c', 'd', '', -1)
+    fh = Label('f', 'h', '', 1)
 
     label_store.put(ac)
     label_store.put(bc)
@@ -400,6 +401,7 @@ def test_negative_label_inference(label_store):
     label_store.put(df)
     label_store.put(cd)
     label_store.put(dg)
+    label_store.put(fh)
 
     def get_pair(label):
         return (label.content_id1, label.content_id2)
@@ -408,7 +410,8 @@ def test_negative_label_inference(label_store):
                      ('b', 'd'),
                      ('c', 'd'),
                      ('c', 'e'),
-                     ('c', 'f')]
+                     ('c', 'f'),
+                     ('c', 'h')]
     # [but not (a,b) <-/-> (e,f)]
 
     inference = label_store.negative_label_inference(cd)
