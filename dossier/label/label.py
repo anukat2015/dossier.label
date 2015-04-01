@@ -8,8 +8,9 @@ from __future__ import absolute_import, division, print_function
 from collections import Container, Hashable
 from datetime import datetime
 import functools
-from itertools import imap, combinations, ifilter
+from itertools import combinations, ifilter, imap, product
 import logging
+from operator import attrgetter, itemgetter
 import struct
 import time
 
@@ -189,6 +190,32 @@ class Label(Container, Hashable):
         self.epoch_ticks = epoch_ticks
         self.rating = rating
 
+    def update(self, **kwargs):
+        '''Creates a new label with the modifications given.
+
+        ``kwargs`` supports the same parameters as this class'
+        constructor. A new label is created from a copy of
+        ``self`` with the parameters given as overrides.
+
+        For example, ``lab.update()`` creates a copy of ``lab``.
+        Another example, ``lab.update(annotator_id='foo')``
+        creates a copy of ``lab`` except the ``annotator_id`` field
+        is set to ``'foo'``.
+
+        (This is like ``namedtuple._replace`` or record updates in
+        functional languages.)
+        '''
+        return Label(**dict(self.as_dict(), **kwargs))
+
+    def as_dict(self):
+        '''Returns this label as a Python dictionary.'''
+        return {
+            'content_id1': self.content_id1, 'subtopic_id1': self.subtopic_id1,
+            'content_id2': self.content_id2, 'subtopic_id2': self.subtopic_id2,
+            'annotator_id': self.annotator_id, 'value': self.value,
+            'epoch_ticks': self.epoch_ticks, 'rating': self.rating,
+        }
+
     def __contains__(self, v):
         '''Tests membership of identifiers.
 
@@ -351,6 +378,16 @@ class Label(Container, Hashable):
             return False
         return True
 
+    def changed(self, other):
+        '''Returns true if ``other`` is modified from ``self`.
+
+        More specifically, returns true if and only if ``self``
+        and ``other`` share the same subject but have different
+        coref/rating values.
+        '''
+        return self.same_subject_as(other) \
+                and (self.value, self.rating) != (other.value, other.rating)
+
     @staticmethod
     def most_recent(labels):
         '''Filter an iterator to return the most recent for each subject.
@@ -369,6 +406,50 @@ class Label(Container, Hashable):
             if prev_label is None or not label.same_subject_as(prev_label):
                 yield label
             prev_label = label
+
+    @staticmethod
+    def diff(old, new):
+        '''Returns a *diff* of two sets of labels.
+
+        The diff returned represents the changes required to the set
+        of ``old`` labels in order to provide the same semantic meaning
+        as the set of ``new`` labels. Thus, the diff is a Python dictionary
+        with three keys: ``add``, ``delete`` and ``change``. All three
+        keys map to a sequence of labels.
+
+        ``add`` corresponds to the labels that are in ``new`` but not in
+        ``old``.
+
+        ``delete`` corresponds to the labels that are in ``old`` but not
+        in ``new``.
+
+        ``change`` corresponds to the labels that are in both ``old``
+        and ``new`` but have different coref/rating values.
+        '''
+        # A wrapper type for a more relaxed label equality comparison.
+        # (We use a wrapper type so that its easy to unwrap it.)
+        class SubjectLabel(object):
+            def __init__(self, lab):
+                self.lab = lab
+            def changed(self, other):
+                return self.lab.changed(other.lab)
+            def __eq__(self, other):
+                return self.lab.same_subject_as(other.lab)
+            def __hash__(self):
+                return hash((self.lab.content_id1, self.lab.content_id2,
+                             self.lab.subtopic_id1, self.lab.subtopic_id2,
+                             self.lab.annotator_id))
+
+        old, new = set(map(SubjectLabel, old)), set(map(SubjectLabel, new))
+        add, delete = list(new.difference(old)), list(old.difference(new))
+        change = map(itemgetter(1),
+                     ifilter(lambda (o, n): o.changed(n), product(old, new)))
+        unwrap = attrgetter('lab')
+        return {
+            'add': map(unwrap, add),
+            'delete': map(unwrap, delete),
+            'change': map(unwrap, change),
+        }
 
     def __hash__(self):
         return (hash(self.content_id1) ^
@@ -731,6 +812,32 @@ class LabelStore(object):
     def delete_all(self):
         '''Deletes all labels in the store.'''
         self.kvl.clear_table(self.TABLE)
+
+    def apply_diff(self, diff):
+        '''Applies a diff to the label table.
+
+        A ``diff`` is a dictionary with three keys: ``add``, ``delete``
+        and ``change``. Each key should map to a list of labels.
+
+        ``add`` corresponds to the labels that are in ``new`` but not in
+        ``old``.
+
+        ``delete`` corresponds to the labels that are in ``old`` but not
+        in ``new``.
+
+        ``change`` corresponds to the labels that are in both ``old``
+        and ``new`` but have different coref/rating values.
+        '''
+        # add and change are easy---just put the labels.
+        # delete is a little trickier. We need to scrub out the impact of
+        # the previous label without actually deleting it. For this, we
+        # use an unknown coref value.
+        insert = (
+            diff['add']
+            + diff['change']
+            + [lab.update(value=CorefValue.Unknown) for lab in diff['delete']]
+        )
+        self.put(*insert)
 
 
 def unordered_pair_eq(pair1, pair2):
