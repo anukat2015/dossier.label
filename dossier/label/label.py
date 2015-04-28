@@ -462,9 +462,9 @@ class Label(Container, Hashable):
                 hash(self.rating))
 
     def __str__(self):
-        res = repr(self.content_id1)
+        res = repr(self.content_id1)[1:-1] # strip quotes
         if self.subtopic_id1:
-            res += '(' + repr(self.subtopic_id1) + ')'
+            res += '(' + repr(self.subtopic_id1)[1:-1] + ')'
         if self.value is CorefValue.Positive:
             res += ' =='
         elif self.value is CorefValue.Unknown:
@@ -474,9 +474,9 @@ class Label(Container, Hashable):
         else:
             res += ' **'
         res += '(' + str(self.rating) + ') '
-        res += repr(self.content_id2)
+        res += repr(self.content_id2)[1:-1] # strip quotes
         if self.subtopic_id2:
-            res += '(' + repr(self.subtopic_id2) + ')'
+            res += '(' + repr(self.subtopic_id2)[1:-1] + ')'
         res += ' by ' + self.annotator_id
         res += ' at ' + str(datetime.utcfromtimestamp(self.epoch_ticks))
         return res
