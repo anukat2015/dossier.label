@@ -462,9 +462,9 @@ class Label(Container, Hashable):
                 hash(self.rating))
 
     def __str__(self):
-        res = self.content_id1
+        res = repr(self.content_id1)
         if self.subtopic_id1:
-            res += '(' + self.subtopic_id1 + ')'
+            res += '(' + repr(self.subtopic_id1) + ')'
         if self.value is CorefValue.Positive:
             res += ' =='
         elif self.value is CorefValue.Unknown:
@@ -474,9 +474,9 @@ class Label(Container, Hashable):
         else:
             res += ' **'
         res += '(' + str(self.rating) + ') '
-        res += self.content_id2
+        res += repr(self.content_id2)
         if self.subtopic_id2:
-            res += '(' + self.subtopic_id2 + ')'
+            res += '(' + repr(self.subtopic_id2) + ')'
         res += ' by ' + self.annotator_id
         res += ' at ' + str(datetime.utcfromtimestamp(self.epoch_ticks))
         return res
@@ -536,15 +536,7 @@ class LabelStore(object):
         '''
         puts = []
         for label in labels:
-            # Store `label` under both normal and swapped key tuples,
-            # so that we can efficiently find c2<->c1 labels
-            k1 = (label.content_id1, label.content_id2,
-                  label.subtopic_id1, label.subtopic_id2,
-                  label.annotator_id, time_complement(label.epoch_ticks))
-            k2 = (label.content_id2, label.content_id1,
-                  label.subtopic_id2, label.subtopic_id1,
-                  label.annotator_id, time_complement(label.epoch_ticks))
-
+            k1, k2 = self._keys_from_label(label)
             # Pack value and rating into a single byte, since both will likely
             # be small integers
             to_pack = (label.value.value+1) | (label.rating << 4)
@@ -552,6 +544,17 @@ class LabelStore(object):
             puts.append((k1, v))
             puts.append((k2, v))
         self.kvl.put(self.TABLE, *puts)
+
+    def _keys_from_label(self, label):
+        # `label` is stored under both normal and swapped key tuples,
+        # so that we can efficiently find c2<->c1 labels
+        k1 = (label.content_id1, label.content_id2,
+              label.subtopic_id1, label.subtopic_id2,
+              label.annotator_id, time_complement(label.epoch_ticks))
+        k2 = (label.content_id2, label.content_id1,
+              label.subtopic_id2, label.subtopic_id1,
+              label.annotator_id, time_complement(label.epoch_ticks))
+        return k1, k2
 
     def get(self, cid1, cid2, annotator_id, subid1='', subid2=''):
         '''Retrieve a label from the store.
@@ -812,6 +815,21 @@ class LabelStore(object):
     def delete_all(self):
         '''Deletes all labels in the store.'''
         self.kvl.clear_table(self.TABLE)
+
+    def delete(self, *labels):
+        '''Delete `labels` from the store, which involves deleting two
+        records for each :class:`Label`.
+
+        :rtype: None
+        :raises: :exc:`KeyError` if any of the `labels` could not be found.
+
+        '''
+        deletes = []
+        for label in labels:
+            k1, k2 = self._keys_from_label(label)
+            deletes.append(k1)
+            deletes.append(k2)
+        self.kvl.delete(self.TABLE, *deletes)
 
     def apply_diff(self, diff):
         '''Applies a diff to the label table.

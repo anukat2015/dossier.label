@@ -70,14 +70,42 @@ class App(yakonfig.cmd.ArgParseCmd):
     def args_list(self, p):
         p.add_argument('--include-deleted', action='store_true',
                        help='When set, show deleted labels.')
+        p.add_argument('--substring', help='Case-sensitive string to filter content_ids')
+        p.add_argument('--ignore-case', action='store_true',
+                       help='Switch substring filtering to case-insensitive')
+        p.add_argument('--delete', action='store_true',
+                       help='Delete labels that are listed; you will be asked'
+                       ' to approve the displayed list.')
 
     def do_list(self, args):
         labels = self.label_store.everything(
             include_deleted=args.include_deleted)
+        def substring_match(k):
+            if (args.substring in k.content_id1 or
+                args.substring in k.content_id2):
+                return True
+            if args.ignore_case:
+                if (args.substring.lower() in k.content_id1.lower() or
+                    args.substring.lower() in k.content_id2.lower()):
+                    return True
+        to_delete = []
         for k, group in groupby(sorted(labels)):
+            if args.substring and not substring_match(k):
+                continue
             self.stdout.write('%s\n' % (k,))
+            if args.delete:
+                to_delete.append(k)
             for lab in islice(group, 1, None):
                 self.stdout.write('    %s\n' % repr(lab))
+                if args.delete:
+                    to_delete.append(lab)
+        if args.delete:
+            response = raw_input('Are you sure that you want to delete %d labels? [y/N]: ' %
+                                 len(to_delete))
+            if response.lower() in ['y', 'yes']:
+                self.label_store.delete(*to_delete)
+                print('Deleted all %d labels.' % len(to_delete))
+
 
     def args_dump_all(self, p):
         p.add_argument('--exclude-deleted', action='store_true',
@@ -128,7 +156,7 @@ class App(yakonfig.cmd.ArgParseCmd):
         '''Get labels directly connected to a content item.'''
         for label in self.label_store.directly_connected(args.content_id):
             if args.value is None or label.value.value == args.value:
-                self.stdout.write('{}\n'.format(label))
+                self.stdout.write('{0}\n'.format(label))
 
     def args_connected(self, p):
         p.add_argument('content_id', type=str,
@@ -138,7 +166,7 @@ class App(yakonfig.cmd.ArgParseCmd):
         '''Find a connected component from positive labels on an item.'''
         connected = self.label_store.connected_component(args.content_id)
         for label in connected:
-            self.stdout.write('{}\n'.format(label))
+            self.stdout.write('{0}\n'.format(label))
 
     def args_delete_all(self, p):
         pass

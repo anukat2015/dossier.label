@@ -53,6 +53,22 @@ def test_put_get(label_store):
     _()
 
 
+def test_put_get_delete_get(label_store):
+    @qc
+    def _(cid1=id_, cid2=id_, ann=id_, v=coref_value):
+        label_store.delete_all()
+
+        lab = Label(cid1, cid2, ann, v)
+        label_store.put(lab)
+        got = label_store.get(cid1, cid2, ann)
+        assert lab == got and lab.value == got.value
+
+        label_store.delete(lab)
+        with pytest.raises(KeyError):
+            label_store.get(cid1, cid2, ann)
+    _()
+
+
 def test_put_get_unordered(label_store):
     @qc
     def _(cid1=id_, cid2=id_, ann=id_, v=coref_value):
