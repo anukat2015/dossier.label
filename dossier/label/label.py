@@ -7,7 +7,6 @@ from __future__ import absolute_import, division, print_function
 
 from collections import Container, Hashable
 from datetime import datetime
-import functools
 from itertools import combinations, ifilter, imap, product
 import logging
 from operator import attrgetter, itemgetter
@@ -15,6 +14,7 @@ import struct
 import time
 
 import enum
+from total_ordering import total_ordering
 
 
 logger = logging.getLogger(__name__)
@@ -76,7 +76,7 @@ class CorefValue(enum.Enum):
         return NotImplemented
 
 
-@functools.total_ordering
+@total_ordering
 class Label(Container, Hashable):
     '''An immutable unit of ground truth data.
 

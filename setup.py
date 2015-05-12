@@ -43,6 +43,7 @@ setup(
         'kvlayer',
         'pyquchk',
         'pytest',
+        'total-ordering',
         'yakonfig >= 0.7.2',
     ],
     include_package_data=True,
