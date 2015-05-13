@@ -927,39 +927,6 @@ def expand_labels(labels, subtopic=False):
                         subtopic_id1=subid1, subtopic_id2=subid2)
 
 
-def expand_labels_with_subtopics(labels):
-    '''Expand a connected component of labels with subtopics.
-
-    This is just like ``expand_labels``, except it assumes that the
-    connected component given is a *subtopic* connected component.
-    '''
-    labels = list(labels)
-    assert all(lab.value == CorefValue.Positive for lab in labels)
-
-    # Anything to expand?
-    if len(labels) == 0:
-        return
-
-    annotator = labels[0].annotator_id
-
-    data_backed = set()
-    connected_component = set()
-    for label in labels:
-        ident1, ident2 = idents_from_label(label, tuple)
-        data_backed.add(normalize_pair(ident1, ident2))
-        connected_component.add(ident1)
-        connected_component.add(ident2)
-
-    # We do not want to rebuild the Labels we already have,
-    # because they have true annotator_id and subtopic
-    # fields that we may want to preserve.
-    for ident1, ident2 in combinations(connected_component, 2):
-        if normalize_pair(ident1, ident2) not in data_backed:
-            (cid1, subid1), (cid2, subid2) = ident1, ident2
-            yield Label(cid1, cid2, annotator, CorefValue.Positive,
-                        subtopic_id1=subid1, subtopic_id2=subid2)
-
-
 def normalize_ident(ident):
     '''Splits a generic identifier.
 
