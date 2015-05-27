@@ -40,7 +40,7 @@ setup(
     install_requires=[
         'cbor',
         'enum34',
-        'kvlayer',
+        'kvlayer>=0.5.7',
         'pyquchk',
         'pytest',
         'total-ordering',
