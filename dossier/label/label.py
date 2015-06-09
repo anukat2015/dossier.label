@@ -5,6 +5,7 @@
 '''
 from __future__ import absolute_import, division, print_function
 
+import cbor
 from collections import Container, Hashable
 from datetime import datetime
 from itertools import combinations, ifilter, imap, product
@@ -132,6 +133,11 @@ class Label(Container, Hashable):
        An additional score showing the relative importance of this
        label, mirroring :class:`streamcorpus.Rating`.
 
+    .. attribute:: meta
+
+       Any additional meta data about this label, structured as
+       a dictionary.
+
     .. automethod:: __init__
     .. automethod:: __contains__
     .. automethod:: other
@@ -143,7 +149,7 @@ class Label(Container, Hashable):
 
     def __init__(self, content_id1, content_id2, annotator_id, value,
                  subtopic_id1=None, subtopic_id2=None, epoch_ticks=None,
-                 rating=None):
+                 rating=None, meta=None):
         '''Create a new label.
 
         Parameters are assigned to their corresponding fields, with
@@ -190,6 +196,10 @@ class Label(Container, Hashable):
         self.epoch_ticks = epoch_ticks
         self.rating = rating
 
+        self.meta = meta
+        if self.meta is None:
+            self.meta = {}
+
     def update(self, **kwargs):
         '''Creates a new label with the modifications given.
 
@@ -214,6 +224,7 @@ class Label(Container, Hashable):
             'content_id2': self.content_id2, 'subtopic_id2': self.subtopic_id2,
             'annotator_id': self.annotator_id, 'value': self.value,
             'epoch_ticks': self.epoch_ticks, 'rating': self.rating,
+            'meta': self.meta,
         }
 
     def __contains__(self, v):
@@ -537,10 +548,7 @@ class LabelStore(object):
         puts = []
         for label in labels:
             k1, k2 = self._keys_from_label(label)
-            # Pack value and rating into a single byte, since both will likely
-            # be small integers
-            to_pack = (label.value.value+1) | (label.rating << 4)
-            v = struct.pack('B', to_pack)
+            v = self._value_from_label(label)
             puts.append((k1, v))
             puts.append((k2, v))
         self.kvl.put(self.TABLE, *puts)
@@ -555,6 +563,17 @@ class LabelStore(object):
               label.subtopic_id2, label.subtopic_id1,
               label.annotator_id, time_complement(label.epoch_ticks))
         return k1, k2
+
+    def _value_from_label(self, label):
+        # Pack value and rating into a single byte, since both will likely
+        # be small integers.
+        to_pack = (label.value.value+1) | (label.rating << 4)
+        v = struct.pack('B', to_pack)
+
+        # Encode the metadata.
+        meta_ser = cbor.dumps(label.meta)
+
+        return v + meta_ser
 
     def get(self, cid1, cid2, annotator_id, subid1='', subid2=''):
         '''Retrieve a label from the store.
@@ -591,9 +610,14 @@ class LabelStore(object):
         (content_id1, content_id2, subtopic_id1, subtopic_id2,
          annotator_id, inverted_epoch_ticks) = k
         epoch_ticks = time_complement(inverted_epoch_ticks)
-        (unpacked,) = struct.unpack('B', v)
+
+        (unpacked,) = struct.unpack('B', v[0])
         value = (unpacked & 15) - 1
         rating = (unpacked >> 4)
+        meta = None
+        if len(v) > 1:
+            meta = cbor.loads(v[1:])
+
         return Label(content_id1=content_id1,
                      content_id2=content_id2,
                      annotator_id=annotator_id,
@@ -601,7 +625,8 @@ class LabelStore(object):
                      subtopic_id1=subtopic_id1,
                      subtopic_id2=subtopic_id2,
                      epoch_ticks=epoch_ticks,
-                     rating=rating)
+                     rating=rating,
+                     meta=meta)
 
     def directly_connected(self, ident):
         '''Return a generator of labels connected to ``ident``.

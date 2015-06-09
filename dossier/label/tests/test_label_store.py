@@ -7,6 +7,7 @@ from __future__ import absolute_import, division, print_function
 
 from pyquchk import qc
 import pytest
+import struct
 
 from dossier.label import Label, LabelStore
 from dossier.label.tests import kvl, coref_value, time_value, id_  # noqa
@@ -518,3 +519,32 @@ def test_sub_expand(label_store):
 
     connected = list(label_store.expand(('a', '1')))
     assert frozenset(connected) == frozenset([a1b2, b2c3, a1c3])
+
+
+# Metadata testing below.
+
+
+def test_store_legacy_compatibility(label_store):
+    def legacy_put_label(label):
+        k1, k2 = label_store._keys_from_label(label)
+        to_pack = (label.value.value+1) | (label.rating << 4)
+        v = struct.pack('B', to_pack)
+        label_store.kvl.put(label_store.TABLE, *[(k1, v), (k2, v)])
+
+    label = Label('a', 'b', '', 1, '1', '2')
+    legacy_put_label(label)
+    label_from_store = label_store.get('a', 'b', '', subid1='1', subid2='2')
+    assert label == label_from_store
+
+
+def test_meta_storage(label_store):
+    label = Label('a', 'b', '', 1, '1', '2')
+    label.meta['hello'] = 'world'
+    label.meta['subtopic1_name'] = 'foo'
+    label.meta['some_num'] = 5
+    label.meta['some_datastructure'] = [1, 2, 3]
+
+    label_store.put(label)
+    label_from_store = label_store.get('a', 'b', '', subid1='1', subid2='2')
+    assert label == label_from_store
+    assert label.meta == label_from_store.meta
