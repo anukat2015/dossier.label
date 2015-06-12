@@ -9,7 +9,7 @@ VERSION, SOURCE_LABEL = get_git_version()
 PROJECT = 'dossier.label'
 AUTHOR = 'Diffeo, Inc.'
 AUTHOR_EMAIL = 'support@diffeo.com'
-URL = 'http://github.com/dossier/dossier.label'
+URL = 'https://github.com/dossier/dossier.label'
 DESC = 'Label (ground truth) storage for DossierStack'
 
 
@@ -26,7 +26,7 @@ setup(
     version=VERSION,
     description=DESC,
     license='MIT',
-    long_description=read_file('README.md'),
+    long_description=read_file('README.rst'),
     author=AUTHOR,
     author_email=AUTHOR_EMAIL,
     url=URL,
