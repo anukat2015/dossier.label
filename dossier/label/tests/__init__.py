@@ -14,6 +14,7 @@ import yakonfig
 
 # Generators of random values.
 coref_value = int_(low=-1, high=1, uniform=True)
+relation_type = int_(low=-1, high=3, uniform=True)
 # "Sometime in 2014"
 time_value = int_(low=1388534400, high=1420070400, uniform=True)
 id_ = str_letters
