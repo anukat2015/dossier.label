@@ -649,6 +649,35 @@ class LabelStore(object):
                                content_id=content_id,
                                subtopic_id=subtopic_id)
 
+    def same_connected_component(self, ident1, ident2):
+        '''Returns True if ident1 and ident2 are connected via positive
+        inference.
+        '''
+        pass
+
+    def split_by_connected_component(self, idents):
+        '''Split idents into equivalence classes based on connected
+        components.
+        '''
+        idents_remaining = set(idents)
+        connected_components = []
+        for ident in idents:
+            if ident not in idents_remaining:
+                continue
+
+            idents_remaining.remove(ident)
+
+            connected_component = [ident]
+            for label in self.connected_component(ident):
+                cids = label.content_id1, label.content_id2
+                for cid in cids:
+                    if cid in idents_remaining:
+                        connected_component.append(cid)
+                        idents_remaining.remove(cid)
+
+            connected_components.append(sorted(connected_component))
+        return connected_components
+
     def connected_component(self, ident):
         '''Return a connected component generator for ``ident``.
 

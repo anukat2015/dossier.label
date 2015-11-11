@@ -494,6 +494,30 @@ def test_sub_direct_connect(label_store):
     assert direct == [a1b2, a1c3]
 
 
+def test_split_by_connected_component(label_store):
+    a1 = Label('a1', 'a2', '', 1)
+    a2 = Label('a2', 'a3', '', 1)
+    a3 = Label('a3', 'a4', '', 1)
+    a4 = Label('a4', 'a1', '', 1)
+
+    b1 = Label('b', 'b1', '', 1)
+    b2 = Label('b', 'b2', '', 1)
+    b3 = Label('b', 'b3', '', 1)
+
+    c1 = Label('c1', 'c2', '', 1)
+
+    label_store.put(a1, a2, a3, a4, b1, b2, b3, c1)
+
+    ids = ['a2', 'a3', 'b1', 'b3', 'c1', 'd', 'e']
+
+    splits = label_store.split_by_connected_component(ids)
+
+    assert ['a2', 'a3'] in splits
+    assert ['b1', 'b3'] in splits
+    assert ['c1'] in splits
+    assert ['d'] in splits
+    assert ['e'] in splits
+
 def test_sub_connected(label_store):
     a1b2 = Label('a', 'b', '', 1, '1', '2')
     b2c3 = Label('b', 'c', '', 1, '2', '3')
