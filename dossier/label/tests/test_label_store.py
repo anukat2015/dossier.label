@@ -476,8 +476,6 @@ def test_negative_inference(label_store):
 
 
 # Subtopic testing is below.
-
-
 def test_sub_direct_connect(label_store):
     a1b2 = Label('a', 'b', '', 1, '1', '2')
     a1c3 = Label('a', 'c', '', 1, '1', '3')
@@ -492,7 +490,6 @@ def test_sub_direct_connect(label_store):
     # subtopic_id of 'a'.
     direct = list(label_store.directly_connected(('a', '1')))
     assert direct == [a1b2, a1c3]
-
 
 def test_split_by_connected_component(label_store):
     a1 = Label('a1', 'a2', '', 1)

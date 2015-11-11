@@ -649,12 +649,6 @@ class LabelStore(object):
                                content_id=content_id,
                                subtopic_id=subtopic_id)
 
-    def same_connected_component(self, ident1, ident2):
-        '''Returns True if ident1 and ident2 are connected via positive
-        inference.
-        '''
-        pass
-
     def split_by_connected_component(self, idents):
         '''Split idents into equivalence classes based on connected
         components.
