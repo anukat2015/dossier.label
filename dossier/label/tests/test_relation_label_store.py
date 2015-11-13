@@ -46,3 +46,26 @@ def test_put_get(rel_label_store):
     # Only want latest label.
     assert l3 == l2
     assert l3 != l1
+
+
+def test_get_relationships_for_idents(rel_label_store):
+    l1 = RelationLabel('A', 'B1', 'foo', RelationType.NONE)
+    l2 = RelationLabel('A', 'B2', 'foo', RelationType.UNKNOWN)
+    l3 = RelationLabel('A', 'B3', 'foo', RelationType.AKA)
+    l4 = RelationLabel('A', 'B4', 'foo', RelationType.WEAK)
+    l5 = RelationLabel('A', 'B5', 'foo', RelationType.STRONG)
+
+    rel_label_store.put(l1, l2, l3, l4, l5)
+
+    idents = ['B1', 'B2', 'B3', 'B4', 'B5', 'C1', 'D1']
+
+    relations = rel_label_store.get_relationships_for_idents('A', idents)
+
+    assert relations['B1'] == RelationType.NONE
+    assert relations['B2'] == RelationType.UNKNOWN
+    assert relations['B3'] == RelationType.AKA
+    assert relations['B4'] == RelationType.WEAK
+    assert relations['B5'] == RelationType.STRONG
+
+    assert 'C1' not in relations
+    assert 'D1' not in relations

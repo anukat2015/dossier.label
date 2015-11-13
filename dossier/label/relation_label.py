@@ -202,6 +202,7 @@ class RelationLabelStore(object):
     '''
 
     TABLE = 'rel_label'
+    config_name = 'relation_label_store'
 
     _kvlayer_namespace = {
         # (cid1, cid2, annotator_id, time) -> (rel_type, meta)
@@ -275,6 +276,26 @@ class RelationLabelStore(object):
 
         labels = self.everything(content_id=content_id)
         return ifilter(is_related, labels)
+
+    def get_relationships_for_idents(self, cid, idents):
+        '''Get relationships between ``idents`` and a ``cid``.
+
+        Returns a dictionary mapping the identifiers in ``idents``
+        to either None, if no relationship label is found between
+        the identifier and ``cid``, or a RelationshipType classifying
+        the nature of the relationship between the identifier and
+        ``cid``.
+        '''
+        keys = [(cid, ident,) for ident in idents]
+        key_ranges = zip(keys, keys)
+        mapping = {}
+        for k, v in self.kvl.scan(self.TABLE, *key_ranges):
+            label = self._label_from_kvlayer(k, v)
+            ident = label.other(cid)
+            rel_type = label.rel_type
+            mapping[ident] = label.rel_type
+
+        return mapping
 
     def everything(self, content_id=None):
         '''Returns a generator of all labels in the store.
