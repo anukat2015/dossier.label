@@ -14,7 +14,7 @@ import enum
 from itertools import imap, ifilter
 from total_ordering import total_ordering
 
-from dossier.label.label import time_complement
+from dossier.label.label import time_complement, LabelStore
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +152,7 @@ class RelationLabel(Container, Hashable):
         if cid == self.content_id1:
             return self.content_id2
         elif cid == self.content_id2:
-            return self.content_id2
+            return self.content_id1
         else:
             raise KeyError(cid)
 
