@@ -19,7 +19,7 @@ from dossier.label.label import time_complement, LabelStore
 logger = logging.getLogger(__name__)
 
 
-class RelationType(enum.Enum):
+class RelationStrength(enum.Enum):
     '''A human-assigned value for the relation type.
 
     NONE - these entities are not related in any meaningful way.
@@ -36,9 +36,9 @@ class RelationType(enum.Enum):
 
     @property
     def is_positive(self):
-        return (self == RelationType.WEAK or
-                self == RelationType.STRONG or
-                self == RelationType.AKA)
+        return (self == RelationStrength.WEAK or
+                self == RelationStrength.STRONG or
+                self == RelationStrength.AKA)
 
     @property
     def is_negative(self):
@@ -71,15 +71,15 @@ class RelationLabel(Container, Hashable):
     :attr:`content_id1` is related to the item at
     :attr:`content_id2`. The statement was recorded by
     :attr:`annotator_id`, a string identifying a user, at
-    :attr:`epoch_ticks`. The nature of the relationship is specified
-    by :attr:`rel_type`, which is of type :class:`RelationType`.
+    :attr:`epoch_ticks`. The strength of the relationship is specified
+    by :attr:`rel_strength`, which is of type :class:`RelationStrength`.
 
     On creation, the tuple is normalized such that `content_id1` is
     less than `content_id2`.
 
     RelationLabels are comparable, sortable, and hashable. The sort
     order compares the two content ids, the annotator id, the epoch
-    ticks, and then rel_type.
+    ticks, and then rel_strength.
 
     .. attribute:: content_id1
 
@@ -93,9 +93,9 @@ class RelationLabel(Container, Hashable):
 
        An identifier of the user making this label.
 
-    .. attribute:: rel_type
+    .. attribute:: rel_strength
 
-       A :class:`RelationType` describing the nature of the relationship.
+       A :class:`RelationStrength` describing the strength of the relationship.
 
     .. attribute:: epoch_ticks
 
@@ -108,12 +108,12 @@ class RelationLabel(Container, Hashable):
        dictionary.
     '''
 
-    def __init__(self, content_id1, content_id2, annotator_id, rel_type,
+    def __init__(self, content_id1, content_id2, annotator_id, rel_strength,
                  epoch_ticks=None, meta=None):
         super(RelationLabel, self).__init__()
 
-        if isinstance(rel_type, int):
-            rel_type = RelationType(rel_type)
+        if isinstance(rel_strength, int):
+            rel_strength = RelationStrength(rel_strength)
         if epoch_ticks is None:
             epoch_ticks = long(time.time())
 
@@ -125,7 +125,7 @@ class RelationLabel(Container, Hashable):
             self.content_id2 = content_id2
 
         self.annotator_id = annotator_id
-        self.rel_type = rel_type
+        self.rel_strength = rel_strength
         self.epoch_ticks = epoch_ticks
         self.meta = meta
         if self.meta is None:
@@ -137,7 +137,7 @@ class RelationLabel(Container, Hashable):
         return {
             'content_id1': self.content_id1,
             'content_id2': self.content_id2,
-            'rel_type': self.rel_type,
+            'rel_strength': self.rel_strength,
             'annotator_id': self.annotator_id,
             'epoch_ticks': self.epoch_ticks,
             'meta': self.meta,
@@ -165,8 +165,8 @@ class RelationLabel(Container, Hashable):
             return self.annotator_id < other.annotator_id
         if self.epoch_ticks != other.epoch_ticks:
             return self.epoch_ticks < other.epoch_ticks
-        if self.rel_type is not other.rel_type:
-            return self.rel_type < other.rel_type
+        if self.rel_strength is not other.rel_strength:
+            return self.rel_strength < other.rel_strength
         return False
 
     def __eq__(self, other):
@@ -178,7 +178,7 @@ class RelationLabel(Container, Hashable):
             return False
         if self.epoch_ticks != other.epoch_ticks:
             return False
-        if self.rel_type != other.rel_type:
+        if self.rel_strength != other.rel_strength:
             return False
         return True
 
@@ -187,7 +187,7 @@ class RelationLabel(Container, Hashable):
                 hash(self.content_id2) ^
                 hash(self.annotator_id) ^
                 hash(self.epoch_ticks) ^
-                hash(self.rel_type))
+                hash(self.rel_strength))
 
 
 class RelationLabelStore(object):
@@ -205,7 +205,7 @@ class RelationLabelStore(object):
     config_name = 'relation_label_store'
 
     _kvlayer_namespace = {
-        # (cid1, cid2, annotator_id, time) -> (rel_type, meta)
+        # (cid1, cid2, annotator_id, time) -> (rel_strength, meta)
         TABLE: (str, str, str, long),
     }
 
@@ -227,7 +227,7 @@ class RelationLabelStore(object):
     def _value_from_label(self, label):
         '''Convert a label into a kvl value.
         '''
-        unser_val = (label.rel_type.value, label.meta)
+        unser_val = (label.rel_strength.value, label.meta)
         return cbor.dumps(unser_val)
 
     def _label_from_kvlayer(self, key, val):
@@ -237,9 +237,9 @@ class RelationLabelStore(object):
          inverted_epoch_ticks) = key
         epoch_ticks = time_complement(inverted_epoch_ticks)
 
-        rel_type, meta = cbor.loads(val)
+        rel_strength, meta = cbor.loads(val)
         return RelationLabel(content_id1, content_id2, annotator_id,
-                             RelationType(rel_type),
+                             RelationStrength(rel_strength),
                              epoch_ticks=epoch_ticks, meta=meta)
 
     def put(self, *labels):
@@ -264,15 +264,15 @@ class RelationLabelStore(object):
         '''Get positive relation labels for ``cid``.
 
         If ``min_strength`` is set, will restrict results to labels
-        with a ``rel_type`` greater or equal to the provided
-        ``RelationType`` value. Note: ``min_strength`` should be of
-        type ``RelationType``.
+        with a ``rel_strength`` greater or equal to the provided
+        ``RelationStrength`` value. Note: ``min_strength`` should be of
+        type ``RelationStrength``.
         '''
         def is_related(label):
             if min_strength is not None:
-                return label.rel_type >= min_strength
+                return label.rel_strength >= min_strength
             else:
-                return label.rel_type.is_positive
+                return label.rel_strength.is_positive
 
         labels = self.everything(content_id=content_id)
         return ifilter(is_related, labels)
@@ -283,7 +283,7 @@ class RelationLabelStore(object):
         Returns a dictionary mapping the identifiers in ``idents``
         to either None, if no relationship label is found between
         the identifier and ``cid``, or a RelationshipType classifying
-        the nature of the relationship between the identifier and
+        the strength of the relationship between the identifier and
         ``cid``.
         '''
         keys = [(cid, ident,) for ident in idents]
@@ -292,8 +292,8 @@ class RelationLabelStore(object):
         for k, v in self.kvl.scan(self.TABLE, *key_ranges):
             label = self._label_from_kvlayer(k, v)
             ident = label.other(cid)
-            rel_type = label.rel_type
-            mapping[ident] = label.rel_type
+            rel_strength = label.rel_strength
+            mapping[ident] = label.rel_strength
 
         return mapping
 

@@ -9,7 +9,7 @@ import pytest
 
 from dossier.label.label import LabelStore, Label
 from dossier.label.relation_label import RelationLabelStore, \
-    RelationLabel, RelationType
+    RelationLabel, RelationStrength
 from dossier.label.combined_store import CombinedLabelStore
 from dossier.label.tests import kvl
 
@@ -31,11 +31,11 @@ def test_relationship_graph(combined_label_store):
             label = Label(ent, coref_ent, 'foo', 1)
             combined_label_store.label_store.put(label)
 
-    rl1 = RelationLabel('A', 'B', 'foo', RelationType.STRONG)
-    rl2 = RelationLabel('A', 'C', 'foo', RelationType.WEAK)
-    rl3 = RelationLabel('A', 'D', 'foo', RelationType.NONE)
-    rl4 = RelationLabel('A', 'E', 'foo', RelationType.AKA)
-    rl5 = RelationLabel('A', 'F', 'foo', RelationType.NONE)
+    rl1 = RelationLabel('A', 'B', 'foo', RelationStrength.STRONG)
+    rl2 = RelationLabel('A', 'C', 'foo', RelationStrength.WEAK)
+    rl3 = RelationLabel('A', 'D', 'foo', RelationStrength.NONE)
+    rl4 = RelationLabel('A', 'E', 'foo', RelationStrength.AKA)
+    rl5 = RelationLabel('A', 'F', 'foo', RelationStrength.NONE)
     combined_label_store.rel_label_store.put(
         rl1, rl2, rl3, rl4, rl5)
 

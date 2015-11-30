@@ -66,7 +66,7 @@ configuration setup.
 from __future__ import absolute_import, division, print_function
 
 from dossier.label.label import Label, LabelStore, CorefValue, expand_labels
-from dossier.label.relation_label import RelationLabel, RelationType, \
+from dossier.label.relation_label import RelationLabel, RelationStrength, \
     RelationLabelStore
 
 __all__ = ['Label', 'LabelStore', 'CorefValue', 'expand_labels']
