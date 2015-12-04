@@ -277,6 +277,17 @@ class RelationLabelStore(object):
         labels = self.everything(content_id=content_id)
         return ifilter(is_related, labels)
 
+    def get_related_ids(self, content_id, min_strength=None):
+        '''Get identifiers for related identifiers.
+        '''
+        related_labels = self.get_related(content_id,
+                                          min_strength=min_strength)
+        related_idents = set()
+        for label in related_labels:
+            related_idents.add(label.other(content_id))
+
+        return list(related_idents)
+
     def get_relationships_for_idents(self, cid, idents):
         '''Get relationships between ``idents`` and a ``cid``.
 
