@@ -1,7 +1,7 @@
 '''dossier.label.label
 
 .. This software is released under an MIT/X11 open source license.
-   Copyright 2012-2015 Diffeo, Inc.
+   Copyright 2012-2016 Diffeo, Inc.
 '''
 from __future__ import absolute_import, division, print_function
 
@@ -396,8 +396,8 @@ class Label(Container, Hashable):
         and ``other`` share the same subject but have different
         coref/rating values.
         '''
-        return self.same_subject_as(other) \
-                and (self.value, self.rating) != (other.value, other.rating)
+        return (self.same_subject_as(other) and
+                (self.value != other.value or self.rating != other.rating))
 
     @staticmethod
     def most_recent(labels):
@@ -442,10 +442,13 @@ class Label(Container, Hashable):
         class SubjectLabel(object):
             def __init__(self, lab):
                 self.lab = lab
+
             def changed(self, other):
                 return self.lab.changed(other.lab)
+
             def __eq__(self, other):
                 return self.lab.same_subject_as(other.lab)
+
             def __hash__(self):
                 return hash((self.lab.content_id1, self.lab.content_id2,
                              self.lab.subtopic_id1, self.lab.subtopic_id2,
@@ -473,7 +476,7 @@ class Label(Container, Hashable):
                 hash(self.rating))
 
     def __str__(self):
-        res = repr(self.content_id1)[1:-1] # strip quotes
+        res = repr(self.content_id1)[1:-1]  # strip quotes
         if self.subtopic_id1:
             res += '(' + repr(self.subtopic_id1)[1:-1] + ')'
         if self.value is CorefValue.Positive:
@@ -485,7 +488,7 @@ class Label(Container, Hashable):
         else:
             res += ' **'
         res += '(' + str(self.rating) + ') '
-        res += repr(self.content_id2)[1:-1] # strip quotes
+        res += repr(self.content_id2)[1:-1]  # strip quotes
         if self.subtopic_id2:
             res += '(' + repr(self.subtopic_id2)[1:-1] + ')'
         res += ' by ' + self.annotator_id
@@ -834,7 +837,7 @@ class LabelStore(object):
         return accept
 
     def everything(self, include_deleted=False, content_id=None,
-                   subtopic_id=None):
+                   subtopic_id=None, prefix=None):
         '''Returns a generator of all labels in the store.
 
         If `include_deleted` is :const:`True`, labels that have been
@@ -842,15 +845,21 @@ class LabelStore(object):
         `content_id` is not :const:`None`, only labels for that
         content ID are retrieved; and then if `subtopic_id` is not
         :const:`None`, only that subtopic is retrieved, else all
-        subtopics are retrieved.  The returned labels will always be
-        in sorted order, content IDs first, and with those with the
-        same content, subtopic, and annotator IDs sorted newest first.
+        subtopics are retrieved.  If `content_id` is :const:`None` but
+        `prefix` is not, then only labels with at least one content ID
+        beginning with `prefix` will be returned.  The returned labels
+        will always be q in sorted order, content IDs first, and with
+        those with the same content, subtopic, and annotator IDs
+        sorted newest first.
 
         :rtype: generator of :class:`Label`
 
         '''
         if content_id is not None:
             ranges = [((content_id,), (content_id,))]
+        elif prefix is not None:
+            # This is the cheap, easy, and wrong way to do this
+            ranges = [((prefix,), (prefix + b'\xff',))]
         else:
             ranges = []
         labels = self.kvl.scan(self.TABLE, *ranges)
@@ -899,9 +908,10 @@ class LabelStore(object):
         # the previous label without actually deleting it. For this, we
         # use an unknown coref value.
         insert = (
-            diff['add']
-            + diff['change']
-            + [lab.update(value=CorefValue.Unknown) for lab in diff['delete']]
+            diff['add'] +
+            diff['change'] +
+            [lab.update(value=CorefValue.Unknown)
+             for lab in diff['delete']]
         )
         self.put(*insert)
 

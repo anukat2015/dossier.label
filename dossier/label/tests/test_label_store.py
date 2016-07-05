@@ -1,16 +1,19 @@
 '''dossier.label.tests
 
 .. This software is released under an MIT/X11 open source license.
-   Copyright 2012-2015 Diffeo, Inc.
+   Copyright 2012-2016 Diffeo, Inc.
 '''
 from __future__ import absolute_import, division, print_function
 
 from pyquchk import qc
+from pyquchk.arbitraries.numbers import int_
+from pyquchk.arbitraries.sequences import str_letters
 import pytest
 import struct
 
 from dossier.label import Label, LabelStore
-from dossier.label.tests import kvl, coref_value, time_value, id_  # noqa
+from . import kvl  # noqa
+from . import coref_value, time_value, id_
 
 
 @pytest.yield_fixture  # noqa
@@ -202,6 +205,30 @@ def test_everything_subtopic_id(label_store):
             expected = [l1]
         assert (list(label_store.everything(content_id=cid1a,
                                             subtopic_id=sid1a)) == expected)
+    _()
+
+
+def test_everything_prefix(label_store):
+    @qc
+    def _(pfx1=str_letters(length=int_(1, 8)),
+          pfx2=str_letters(length=int_(1, 8)),
+          sfx1=str_letters(length=int_(1, 12)),
+          sfx2=str_letters(length=int_(1, 12)),
+          ann=id_, v=coref_value):
+        label_store.delete_all()
+        cid1 = pfx1 + sfx1
+        cid2 = pfx1 + sfx2
+        l = Label(cid1, cid2, ann, v)
+        label_store.put(l)
+
+        assert (list(label_store.everything(prefix=pfx1))) == [l]
+
+        if pfx1.startswith(pfx2):
+            expected = [l]
+        else:
+            expected = []
+        assert (list(label_store.everything(prefix=pfx2))) == expected
+
     _()
 
 
@@ -491,6 +518,7 @@ def test_sub_direct_connect(label_store):
     direct = list(label_store.directly_connected(('a', '1')))
     assert direct == [a1b2, a1c3]
 
+
 def test_split_by_connected_component(label_store):
     a1 = Label('a1', 'a2', '', 1)
     a2 = Label('a2', 'a3', '', 1)
@@ -514,6 +542,7 @@ def test_split_by_connected_component(label_store):
     assert ['c1'] in splits
     assert ['d'] in splits
     assert ['e'] in splits
+
 
 def test_sub_connected(label_store):
     a1b2 = Label('a', 'b', '', 1, '1', '2')
