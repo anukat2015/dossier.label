@@ -232,6 +232,17 @@ def test_everything_prefix(label_store):
     _()
 
 
+def test_everything_prefix_simple(label_store):
+    @qc
+    def _(cid1=id_, cid2=id_, ann=id_, v=coref_value):
+        label_store.delete_all()
+        l = Label(cid1, cid2, ann, v)
+        label_store.put(l)
+        assert list(label_store.everything(prefix=cid1)) == [l]
+        assert list(label_store.everything(prefix=cid2)) == [l]
+    _()
+
+
 def test_direct_connect_recent(label_store):
     @qc
     def _(cid1=id_, cid2=id_, ann=id_, v1=coref_value, v2=coref_value):

@@ -797,7 +797,7 @@ class LabelStore(object):
                     yield Label(label.content_id2, comp_cid,
                                 'auto', CorefValue.Negative)
 
-    def _filter_keys(self, content_id=None, subtopic_id=None):
+    def _filter_keys(self, content_id=None, prefix=None, subtopic_id=None):
         '''Filter out-of-order labels by key tuple.
 
         :class:`Label` always sorts by `(cid1,cid2,sid1,sid2)`, but
@@ -812,13 +812,26 @@ class LabelStore(object):
         def accept(kvp):
             (content_id1, content_id2, subtopic_id1, subtopic_id2,
              annotator_id, inverted_epoch_ticks) = kvp[0]
-            if content_id is None:
-                # We're scanning everything, so accept the label if
-                # it's the natural order; l.content_id1 == cid1
-                return (content_id1 < content_id2 or
-                        (content_id1 == content_id2 and
-                         subtopic_id1 <= subtopic_id2))
-            assert content_id1 == content_id  # because that's the scan range
+            # In general we'll accept the label if
+            # it's the natural order; l.content_id1 == cid1
+            is_sorted = (content_id1 < content_id2 or
+                         (content_id1 == content_id2 and
+                          subtopic_id1 <= subtopic_id2))
+            if content_id is not None:
+                # We will only see tuples where content_id1 is the
+                # requested content ID
+                assert content_id1 == content_id
+            elif prefix is not None:
+                assert content_id1.startswith(prefix)
+                # If we'll see both orderings of this record, only
+                # accept the sorted one
+                if content_id2.startswith(prefix) and not is_sorted:
+                    return False
+            elif not is_sorted:
+                # We'll see both orderings of everything, reject the
+                # unsorted ones
+                return False
+
             # If we're not looking for subtopic IDs, then accept records
             # matching the content ID that are in natural order
             if subtopic_id is None:
@@ -863,7 +876,8 @@ class LabelStore(object):
         else:
             ranges = []
         labels = self.kvl.scan(self.TABLE, *ranges)
-        labels = ifilter(self._filter_keys(content_id, subtopic_id), labels)
+        labels = ifilter(self._filter_keys(content_id, prefix, subtopic_id),
+                         labels)
         labels = imap(lambda p: self._label_from_kvlayer(*p), labels)
         if not include_deleted:
             labels = Label.most_recent(labels)
